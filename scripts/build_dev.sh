@@ -27,7 +27,7 @@ python3 "$repo_root/scripts/prepare_dev.py" \
   --published-at "$published_at"
 
 mkdir -p "$repo_root/.build/tools" "$repo_root/dist"
-go -C "$zboard_repo" build -o "$repo_root/.build/tools/zboard-pluginpackager" ./backend/tools/pluginpackager
+go -C "$zboard_repo/backend" build -o "$repo_root/.build/tools/zboard-pluginpackager" ./tools/pluginpackager
 
 CARGO_TARGET_DIR="$cargo_target_dir" cargo build \
   --manifest-path "$znet_sink_repo/src-tauri/Cargo.toml" \
