@@ -1,4 +1,4 @@
-.PHONY: check test
+.PHONY: check test keygen dev
 
 test:
 	go test ./...
@@ -7,3 +7,9 @@ test:
 
 check: test
 	git diff --check
+
+keygen:
+	go run ./tools/keygen .local
+
+dev:
+	./scripts/build_dev.sh "$(VERSION)"

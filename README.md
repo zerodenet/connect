@@ -55,3 +55,19 @@ make check
 
 Packaging, signing, publishing, and host installation are deliberately separate later gates.
 No signing key belongs in this repository.
+
+## Dev foundation packages
+
+The reproducible dev build creates two signed, installable foundation packages and one unified
+marketplace entry. It validates distribution wiring only; its UI and runtime explicitly report
+that authorization, subscription synchronization, and messages are not implemented.
+
+```sh
+make keygen
+make dev VERSION=0.0.1-dev.YYYYMMDDHHMM
+```
+
+`make keygen` writes one local publisher identity in `.local/` for both package formats. Keep it
+private and backed up; changing it creates a different publisher identity. The build consumes the
+current ZBoard, ZNet Sink, and marketplace tooling paths documented in `scripts/build_dev.sh` and
+writes ignored artifacts to `dist/`.
