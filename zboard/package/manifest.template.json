@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "id": "org.zerodenet.zboard.server",
-  "name": "ZBoard client integration",
-  "description": "Authorizes ZNet Sink devices and serves entitled subscriptions and read-only messages over the dedicated plugin protocol.",
+  "id": "org.zerodenet.provider-bridge.zboard",
+  "name": "Provider Bridge for ZBoard",
+  "description": "Reference provider adapter that authorizes compatible clients and serves entitled subscriptions and read-only messages over Provider Bridge.",
   "version": "0.0.1",
   "requires": {
     "zboard": ">=0.0.2 <0.1.0",
@@ -27,7 +27,7 @@
     },
     "server": {
       "executables": {
-        "linux-amd64": "runtimes/linux-amd64/zboard-plugin"
+        "linux-amd64": "runtimes/linux-amd64/provider-bridge"
       }
     }
   },

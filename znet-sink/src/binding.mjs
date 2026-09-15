@@ -1,5 +1,5 @@
-export const PRODUCT_ID = 'org.zerodenet.zboard';
-export const PACKAGE_ID = 'org.zerodenet.zboard';
+export const PRODUCT_ID = 'org.zerodenet.provider-bridge';
+export const PACKAGE_ID = 'org.zerodenet.provider-bridge.znet-sink';
 
 const fields = [
   'pluginId',

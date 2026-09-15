@@ -12,3 +12,7 @@ Captured on 2026-09-15 before this repository was initialized.
 
 A SHA names the committed base only; the marketplace and both consumer implementations above had
 uncommitted changes. Re-read their final committed contracts before the first package build.
+
+The source plan used ZBoard and ZNet Sink as the first delivery example. This repository
+generalizes that example into provider and consumer protocol roles; the two named products remain
+reference adapters and acceptance environments, not protocol identity.

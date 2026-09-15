@@ -1,27 +1,33 @@
 # Architecture boundary
 
-The business and transport directions are fixed:
+Provider Bridge has two interoperable roles and host-specific adapters:
 
 ```text
-ZNet Sink plugin -> managed subscription source -> existing subscription sync -> configuration
-ZNet Sink plugin -> controlled host network -> ZBoard plugin route -> narrow ZBoard Host APIs
+provider implementation -> Provider Bridge protocol -> client adapter
+client adapter -> managed source -> existing subscription sync -> client configuration -> selected kernel
 ```
 
-The ZNet Sink package owns source configuration, trusted server-key binding, authorization flow,
-subscription selection, remote-state checks, and read-only message presentation. ZNet Sink owns
-network and secret handles, scheduling, source bindings, synchronization, notification delivery,
-navigation, cancellation, deduplication, and late-result rejection.
+A provider implementation owns its declared protocol route, encrypted requests and responses,
+device records, renewal credentials, revocation epochs, subscription/message orchestration, and
+its own management surface. The provider host remains authoritative for password verification,
+identity, current entitlements, subscription rendering, message audience, administrator roles,
+and the real client IP derived from trusted proxy configuration.
 
-The ZBoard package owns its declared protocol route, encrypted requests and responses, device
-records, renewal credentials, revocation epochs, subscription/message orchestration, and embedded
-account/admin pages. ZBoard remains authoritative for password verification, identity, current
-entitlements, subscription rendering, message audience, administrator roles, and the real client
-IP derived from its trusted proxy configuration.
+A client adapter owns source configuration, trusted provider-key binding, authorization flow,
+subscription selection, remote-state checks, and read-only message presentation. The client host
+owns network and secret handles, scheduling, source bindings, synchronization, notification
+delivery, navigation, cancellation, deduplication, late-result rejection, configuration assembly,
+and kernel lifecycle.
 
-The plugin never calls ZBoard's public login or subscription APIs, receives a core database
-handle, or writes core business tables. It never bypasses ZNet Sink's subscription model to write
-a running Zero configuration. Zero executes the selected network path and configuration; it has
-no ZBoard-specific protocol or session knowledge.
+The initial `zboard/` and `znet-sink/` directories are reference adapters, not protocol ownership.
+A compatible XBoard-like provider may implement the provider contract directly or through its own
+adapter. Another client may implement the consumer contract and use a different kernel without
+changing the wire protocol. The protocol therefore contains no ZBoard database/API dialect,
+ZNet Sink IPC, or Zero configuration commands.
+
+Adapters never call a panel's public login/subscription API as an internal shortcut, receive core
+database handles, or write core business tables. Client adapters never bypass the host's managed
+source and subscription model to write a running kernel configuration.
 
 The wire contract in `protocol/v1/operations.json` is an operation/error inventory. P0 must still
 freeze the byte-level envelope, maintained cryptographic libraries, bidirectional keys/nonces,

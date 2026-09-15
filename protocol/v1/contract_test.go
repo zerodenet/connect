@@ -10,10 +10,10 @@ func TestContractInventoryIsCompleteAndUnique(t *testing.T) {
 	if contract.SchemaVersion != 1 || contract.Status != "p0-draft" {
 		t.Fatalf("unexpected contract header: %#v", contract)
 	}
-	if contract.ProductID != "org.zerodenet.zboard" {
+	if contract.ProductID != "org.zerodenet.provider-bridge" {
 		t.Fatalf("unexpected product id: %q", contract.ProductID)
 	}
-	if contract.Packages["zboard"] != "org.zerodenet.zboard.server" || contract.Packages["znet-sink"] != "org.zerodenet.zboard" {
+	if contract.Packages["zboard"] != "org.zerodenet.provider-bridge.zboard" || contract.Packages["znet-sink"] != "org.zerodenet.provider-bridge.znet-sink" {
 		t.Fatalf("unexpected package identities: %#v", contract.Packages)
 	}
 	seen := map[string]bool{}

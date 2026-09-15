@@ -1,15 +1,32 @@
-# ZBoard for ZNet Sink
+# Provider Bridge
 
-This repository is the implementation home for the ZBoard dual-host plugin. One product ships
-two packages:
+Provider Bridge is a host-neutral integration protocol plus reference adapters for connecting a
+subscription provider to a client. Panels and clients sit at the edge of this contract; the
+protocol does not depend on a particular panel brand or proxy kernel.
 
-- `org.zerodenet.zboard.server`: the ZBoard service plugin and its account/admin pages.
-- `org.zerodenet.zboard`: the ZNet Sink client plugin.
+The first repository release ships two packages:
 
-The first release connects explicitly configured ZBoard sources to ZNet Sink, performs
-password authorization over the plugin protocol, registers a device, renews that authorization,
-lists entitled subscriptions, delivers the selected subscription through the client's existing
-subscription-to-configuration pipeline, and presents source messages as read-only notifications.
+- `org.zerodenet.provider-bridge.zboard`: provider-side reference adapter for ZBoard.
+- `org.zerodenet.provider-bridge.znet-sink`: client-side reference adapter for ZNet Sink.
+
+A different panel can connect by implementing the provider side of the published protocol. A
+different client can implement the consumer side and map delivered subscriptions into its own
+configuration pipeline. Kernel selection and execution remain entirely behind the client host;
+changing Zero to another kernel does not change the Provider Bridge protocol.
+
+The first release authorizes an account, registers a device, renews that authorization, lists
+entitled subscriptions, delivers a selected subscription through the client's existing
+subscription-to-configuration pipeline, and presents provider messages as read-only notifications.
+
+## Compatibility model
+
+- A panel that natively implements the provider contract is directly compatible; it does not need
+  to imitate ZBoard endpoints or token behavior.
+- A panel without native support may ship a provider adapter, as `zboard/` does initially.
+- A client implements the consumer contract once, then maps subscriptions to whichever kernels it
+  supports. The provider never chooses or controls that kernel.
+- Marketplace host targets describe installable adapter packages, not the set of remote providers
+  or kernels compatible with the protocol.
 
 ## Current status
 

@@ -1,4 +1,4 @@
-# P0 host capability gaps
+# P0 reference-adapter host capability gaps
 
 Packaging is blocked until these are resolved as generic host capabilities. The names below are
 responsibilities, not reserved API identifiers.
@@ -6,7 +6,7 @@ responsibilities, not reserved API identifiers.
 ## ZBoard
 
 Current code exposes page, configuration, encrypted private storage, and identity-provider
-capabilities. The v0.0.1 service package additionally needs:
+capabilities. The initial ZBoard provider adapter additionally needs:
 
 - declarative, host-governed plugin HTTP routes with lifecycle shutdown and request limits;
 - password verification that returns only a user assertion, never hashes or a general host token;
@@ -20,9 +20,9 @@ capabilities. The v0.0.1 service package additionally needs:
 ## ZNet Sink
 
 Current code exposes a bounded JavaScript VM and controlled `network.request`, but its manifest
-uses a statically declared origin. The v0.0.1 client package additionally needs:
+uses a statically declared origin. The initial ZNet Sink client adapter additionally needs:
 
-- user-approved dynamic origin bindings for configured ZBoard sources;
+- user-approved dynamic origin bindings for configured compatible providers;
 - secret input and opaque secret/device-key handles that survive restart without exposing values;
 - maintained cryptographic operations suitable for the frozen wire protocol;
 - declared plugin pages/forms and safe internal route navigation;
@@ -33,4 +33,5 @@ uses a statically declared origin. The v0.0.1 client package additionally needs:
 - notifications with source identity, deduplication state, and safe plugin-detail targets.
 
 The first host changes should be narrow capability contracts with negative tests. They must not
-add a ZBoard-specific branch to generic runtime or a second configuration/scheduler backend.
+add provider-brand branches to generic runtime, encode a kernel in the shared protocol, or create
+a second configuration/scheduler backend.

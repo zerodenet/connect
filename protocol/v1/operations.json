@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "status": "p0-draft",
-  "product_id": "org.zerodenet.zboard",
+  "product_id": "org.zerodenet.provider-bridge",
   "packages": {
-    "zboard": "org.zerodenet.zboard.server",
-    "znet-sink": "org.zerodenet.zboard"
+    "zboard": "org.zerodenet.provider-bridge.zboard",
+    "znet-sink": "org.zerodenet.provider-bridge.znet-sink"
   },
   "public_route_metadata": [
     "protocol_version",

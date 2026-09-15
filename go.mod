@@ -1,3 +1,3 @@
-module github.com/zerodenet/zboard-plugin
+module github.com/zerodenet/provider-bridge
 
 go 1.23

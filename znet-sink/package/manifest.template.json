@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "host": "znet-sink",
-  "plugin_id": "org.zerodenet.zboard",
-  "component_id": "zboard-source",
+  "plugin_id": "org.zerodenet.provider-bridge.znet-sink",
+  "component_id": "provider-source",
   "version": "0.0.1",
   "requires_host": ">=0.0.2, <0.1.0",
   "api_version": 1,

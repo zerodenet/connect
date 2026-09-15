@@ -1,6 +1,6 @@
 {
-  "product_id": "org.zerodenet.zboard",
-  "repository": "https://github.com/zerodenet/zboard-plugin",
+  "product_id": "org.zerodenet.provider-bridge",
+  "repository": "https://github.com/zerodenet/provider-bridge",
   "publisher": {
     "id": "zerodenet",
     "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -8,7 +8,7 @@
   "source_commit": "0000000000000000000000000000000000000000",
   "channel": "dev",
   "published_at": "2026-09-15T00:00:00Z",
-  "notes_url": "https://github.com/zerodenet/zboard-plugin/releases/tag/v0.0.1",
+  "notes_url": "https://github.com/zerodenet/provider-bridge/releases/tag/v0.0.1",
   "host_versions": {
     "zboard": {
       "min": "0.0.2",
@@ -21,22 +21,22 @@
   },
   "artifacts": [
     {
-      "path": "../dist/org.zerodenet.zboard.server-linux-amd64.zbplugin",
-      "url": "https://github.com/zerodenet/zboard-plugin/releases/download/v0.0.1/org.zerodenet.zboard.server-linux-amd64.zbplugin",
+      "path": "../dist/org.zerodenet.provider-bridge.zboard-linux-amd64.zbplugin",
+      "url": "https://github.com/zerodenet/provider-bridge/releases/download/v0.0.1/org.zerodenet.provider-bridge.zboard-linux-amd64.zbplugin",
       "os": "linux",
       "arch": "amd64"
     },
     {
-      "path": "../dist/org.zerodenet.zboard-any.zspkg",
-      "url": "https://github.com/zerodenet/zboard-plugin/releases/download/v0.0.1/org.zerodenet.zboard-any.zspkg",
+      "path": "../dist/org.zerodenet.provider-bridge.znet-sink-any.zspkg",
+      "url": "https://github.com/zerodenet/provider-bridge/releases/download/v0.0.1/org.zerodenet.provider-bridge.znet-sink-any.zspkg",
       "os": "any",
       "arch": "any"
     }
   ],
   "listing": {
-    "id": "org.zerodenet.zboard",
-    "name": "ZBoard for ZNet Sink",
-    "description": "Connects explicitly configured ZBoard sources to ZNet Sink for device authorization, managed subscription synchronization, and read-only source messages.",
+    "id": "org.zerodenet.provider-bridge",
+    "name": "Provider Bridge",
+    "description": "Connects compatible subscription providers and clients for device authorization, managed subscription synchronization, and read-only provider messages.",
     "categories": [
       "integration",
       "network"
@@ -45,9 +45,9 @@
     "maintainers": [
       "zerodenet"
     ],
-    "repository": "https://github.com/zerodenet/zboard-plugin",
-    "documentation": "https://github.com/zerodenet/zboard-plugin/blob/main/README.md",
-    "security": "https://github.com/zerodenet/zboard-plugin/blob/main/SECURITY.md",
+    "repository": "https://github.com/zerodenet/provider-bridge",
+    "documentation": "https://github.com/zerodenet/provider-bridge/blob/main/README.md",
+    "security": "https://github.com/zerodenet/provider-bridge/blob/main/SECURITY.md",
     "publisher": {
       "id": "zerodenet",
       "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -59,7 +59,7 @@
     "targets": [
       {
         "host": "zboard",
-        "package_id": "org.zerodenet.zboard.server",
+        "package_id": "org.zerodenet.provider-bridge.zboard",
         "surfaces": [
           "account",
           "admin"
@@ -72,7 +72,7 @@
       },
       {
         "host": "znet-sink",
-        "package_id": "org.zerodenet.zboard",
+        "package_id": "org.zerodenet.provider-bridge.znet-sink",
         "surfaces": [],
         "capabilities": [
           "network.request"

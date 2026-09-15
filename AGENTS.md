@@ -1,20 +1,23 @@
 # Repository guidelines
 
-This repository produces one marketplace product with two independently signed host packages:
-`org.zerodenet.zboard.server` for ZBoard and `org.zerodenet.zboard` for ZNet Sink.
+This repository produces the host-neutral Provider Bridge protocol and independently signed host
+adapters. The first marketplace product contains `org.zerodenet.provider-bridge.zboard` for ZBoard
+and `org.zerodenet.provider-bridge.znet-sink` for ZNet Sink.
 Keep shared wire semantics under `protocol/`, ZBoard code under `zboard/`, ZNet Sink code under
 `znet-sink/`, and cross-host fixtures under `tests/interop/`.
 
-The v0.0.1 product boundary is the ZBoard source, device authorization, session renewal,
+The v0.0.1 product boundary is a compatible provider source, device authorization, session renewal,
 subscription delivery through the client's existing subscription pipeline, and read-only
 message notifications. It is not a second ZBoard panel. Do not add purchasing, account
 management, device management in the client, direct Zero IPC, or a second configuration path.
 
-Host-owned capabilities remain host-owned. The server plugin must use narrow ZBoard Host APIs,
+Host-owned capabilities remain host-owned. A provider adapter must use narrow panel Host APIs,
 never the core database, password hashes, administrator tokens, or public login/subscription
-HTTP APIs. The client plugin must use ZNet Sink network, secret, scheduler, source-provider,
+HTTP APIs. A client adapter must use its host's network, secret, scheduler, source-provider,
 subscription-delivery, notification, and internal-navigation capabilities; it must not open
-sockets, persist passwords, or write active configuration directly.
+sockets, persist passwords, or write active configuration directly. Neither the shared protocol
+nor provider adapters may name or control a proxy kernel; kernel selection remains a client-host
+implementation detail.
 
 The application-layer protocol is not frozen until P0 chooses maintained cryptographic
 libraries and publishes cross-language test vectors. Do not invent cryptographic primitives,

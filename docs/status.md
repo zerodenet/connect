@@ -2,7 +2,7 @@
 
 ## P0 contract and host inventory
 
-- [x] Independent Git repository and one-product/two-package layout.
+- [x] Independent Git repository and host-neutral protocol/reference-adapter layout.
 - [x] Stable draft identities aligned across protocol, package, and marketplace templates.
 - [x] Shared operation/error/sensitivity inventory.
 - [x] Server authorization-generation and device-record invariants with tests.

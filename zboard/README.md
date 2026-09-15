@@ -1,6 +1,7 @@
 # ZBoard package
 
-`domain/authorization.go` captures the first server business invariant without depending on a
+This directory is the ZBoard reference provider adapter; it does not define the shared protocol.
+`domain/authorization.go` captures the first provider business invariant without depending on a
 nonexistent Host API: sessions are bound to one device, user, source, user epoch, and global
 epoch; device revocation and either clear operation fail closed. Periodic activity cannot rewrite
 the last successful password-login time or IP.
