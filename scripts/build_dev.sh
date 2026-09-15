@@ -55,4 +55,10 @@ PYTHONPATH="$marketplace_repo/scripts" python3 "$marketplace_repo/scripts/genera
   "$repo_root/.build/release-build.json" \
   --output "$repo_root/dist/marketplace-entry.json"
 
+go -C "$repo_root" run ./tools/verifydev \
+  "$repo_root/.local/publisher.key.pub" \
+  "$zboard_package" \
+  "$sink_package" \
+  "$version"
+
 shasum -a 256 "$zboard_package" "$sink_package" "$repo_root/dist/marketplace-entry.json"
