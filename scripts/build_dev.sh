@@ -49,7 +49,7 @@ sink_package="$repo_root/dist/org.zerodenet.connect.znet-sink-${version}-any.zsp
   "$repo_root/.build/znet-sink/foundation.mjs" \
   "$repo_root/.local/publisher.seed" \
   "$sink_package" \
-  "$repo_root/dist/znet-sink-release.json"
+  "$repo_root/dist/znet-sink-release-${version}.json"
 
 PYTHONPATH="$marketplace_repo/scripts" python3 "$marketplace_repo/scripts/generate_release_manifest.py" \
   "$repo_root/.build/release-build.json" \
