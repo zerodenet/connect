@@ -1,4 +1,4 @@
-.PHONY: check test keygen dev
+.PHONY: check test keygen dev release
 
 test:
 	go test ./...
@@ -13,4 +13,7 @@ keygen:
 	go run ./tools/keygen .local
 
 dev:
+	./scripts/build_dev.sh "$(VERSION)"
+
+release:
 	./scripts/build_dev.sh "$(VERSION)"

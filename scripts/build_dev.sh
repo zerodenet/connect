@@ -3,7 +3,7 @@ set -eu
 
 version=${1:-}
 if [ -z "$version" ]; then
-  echo "usage: make dev VERSION=0.0.1-dev.YYYYMMDDHHMM" >&2
+  echo "usage: make dev VERSION=0.0.1-dev.YYYYMMDDHHMM or make release VERSION=0.0.1" >&2
   exit 2
 fi
 

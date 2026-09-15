@@ -53,12 +53,13 @@ Run the dependency-free checks with:
 make check
 ```
 
-Packaging, signing, publishing, and host installation are deliberately separate later gates.
-No signing key belongs in this repository.
+Packaging, signing, publishing, and host installation are deliberately separate gates. No signing
+key belongs in this repository, and a published foundation package does not imply that its later
+business capabilities are implemented or accepted end to end.
 
-## Dev foundation packages
+## Foundation packages
 
-The reproducible dev build creates two signed, installable foundation packages and one unified
+The reproducible build creates two signed, installable foundation packages and one unified
 marketplace entry. It validates distribution wiring only; its UI and runtime explicitly report
 that authorization, subscription synchronization, and messages are not implemented. Packaging is
 self-contained in this repository and does not depend on local ZBoard, ZNet Sink, or marketplace
@@ -67,6 +68,7 @@ checkouts.
 ```sh
 make keygen
 make dev VERSION=0.0.1-dev.YYYYMMDDHHMM
+make release VERSION=0.0.1
 ```
 
 `make keygen` writes one local publisher identity in `.local/` for both package formats. Keep it
@@ -74,8 +76,9 @@ private and backed up; changing it creates a different publisher identity. The b
 artifacts to `dist/` and independently verifies both package signatures and payload digests.
 
 Pushing a tag matching `v0.0.1-dev.YYYYMMDDHHMM` runs
-`.github/workflows/dev-release.yml`. The workflow tests the repository, builds and verifies both
-signed packages, retains a workflow artifact, and publishes the files as a GitHub prerelease. Add
-the one-line base64 contents of `.local/publisher.key` as the repository Actions secret
+`.github/workflows/dev-release.yml`; a stable `vMAJOR.MINOR.PATCH` tag runs
+`.github/workflows/release.yml`. Each workflow tests the repository, builds and verifies both
+signed packages, retains a workflow artifact, and publishes the files in the matching GitHub
+Release channel. Add the one-line base64 contents of `.local/publisher.key` as the repository Actions secret
 `CONNECT_PUBLISHER_PRIVATE_KEY`. The workflow requests only `contents: write` for release upload;
 the signing key is never committed or printed.

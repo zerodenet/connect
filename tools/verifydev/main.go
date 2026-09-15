@@ -64,7 +64,7 @@ func main() {
 	if err := verifySink(os.Args[3], os.Args[4], key); err != nil {
 		fatal(fmt.Errorf("verify ZNet Sink package: %w", err))
 	}
-	fmt.Println("verified both dev package signatures, identities, versions, and payload digests")
+	fmt.Println("verified both package signatures, identities, versions, and payload digests")
 }
 
 func readPublicKey(path string) (ed25519.PublicKey, error) {
