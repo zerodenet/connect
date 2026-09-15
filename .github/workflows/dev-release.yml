@@ -1,0 +1,112 @@
+name: dev release
+
+on:
+  push:
+    tags:
+      - "v*-dev.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Resolve release identity
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^0\.0\.1-dev\.[0-9]{12}$ ]]; then
+            echo "tag must match v0.0.1-dev.YYYYMMDDHHMM" >&2
+            exit 1
+          fi
+          published_at=$(date -u -d "@$(git show -s --format=%ct HEAD)" +%Y-%m-%dT%H:%M:%SZ)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "published_at=$published_at" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize publisher identity
+        env:
+          CONNECT_PUBLISHER_PRIVATE_KEY: ${{ secrets.CONNECT_PUBLISHER_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CONNECT_PUBLISHER_PRIVATE_KEY" ]]; then
+            echo "CONNECT_PUBLISHER_PRIVATE_KEY repository secret is required" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p .local
+          printf '%s\n' "$CONNECT_PUBLISHER_PRIVATE_KEY" > .local/publisher.key
+          go run ./tools/keyderive .local/publisher.key .local/publisher.key.pub
+
+      - name: Test
+        run: make check
+
+      - name: Build and verify signed packages
+        env:
+          PUBLISHED_AT: ${{ steps.release.outputs.published_at }}
+        run: make dev VERSION=${{ steps.release.outputs.version }}
+
+      - name: Record checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum \
+            org.zerodenet.connect.zboard-*.zbplugin \
+            org.zerodenet.connect.znet-sink-*.zspkg \
+            marketplace-entry.json \
+            znet-sink-release-*.json > SHA256SUMS
+
+      - name: Retain workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: connect-${{ steps.release.outputs.version }}
+          path: |
+            dist/*.zbplugin
+            dist/*.zspkg
+            dist/*.json
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          mapfile -t assets < <(find dist -maxdepth 1 -type f \( \
+            -name '*.zbplugin' -o -name '*.zspkg' -o -name '*.json' -o -name 'SHA256SUMS' \
+          \) -print | sort)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --verify-tag \
+              --prerelease \
+              --title "Connect $VERSION" \
+              --notes "Signed development foundation for the ZBoard and ZNet Sink package hosts. This release validates automated distribution and installation wiring; account authorization, subscription synchronization, and provider messages are not enabled yet."
+          fi

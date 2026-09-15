@@ -8,11 +8,13 @@
 - [x] Server authorization-generation and device-record invariants with tests.
 - [x] Client source-binding identity and late-result commit guards with tests.
 - [x] Current host capability gap inventory.
+- [x] Self-contained signed dev-foundation packaging and tag-triggered GitHub Actions prerelease workflow.
 - [ ] Final Host API names, fields, authorization scopes, limits, and lifecycle semantics.
 - [ ] Cryptographic suite/library selection and byte-level protocol test vectors.
 - [ ] Real host adapters and the smallest source-authorization/device-record integration sample.
 
 ## Later phases
 
-P1 through P5 remain unimplemented. There are no signed packages, marketplace registration,
-push, release, deployment, real panel integration, or end-to-end acceptance yet.
+P1 through P5 remain unimplemented. The signed dev-foundation packages validate distribution
+format, CI production, and installation wiring only. Marketplace registration, real host adapters,
+deployment, real panel integration, and end-to-end business acceptance remain outstanding.

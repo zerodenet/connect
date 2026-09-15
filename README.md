@@ -60,7 +60,9 @@ No signing key belongs in this repository.
 
 The reproducible dev build creates two signed, installable foundation packages and one unified
 marketplace entry. It validates distribution wiring only; its UI and runtime explicitly report
-that authorization, subscription synchronization, and messages are not implemented.
+that authorization, subscription synchronization, and messages are not implemented. Packaging is
+self-contained in this repository and does not depend on local ZBoard, ZNet Sink, or marketplace
+checkouts.
 
 ```sh
 make keygen
@@ -68,6 +70,12 @@ make dev VERSION=0.0.1-dev.YYYYMMDDHHMM
 ```
 
 `make keygen` writes one local publisher identity in `.local/` for both package formats. Keep it
-private and backed up; changing it creates a different publisher identity. The build consumes the
-current ZBoard, ZNet Sink, and marketplace tooling paths documented in `scripts/build_dev.sh` and
-writes ignored artifacts to `dist/`.
+private and backed up; changing it creates a different publisher identity. The build writes ignored
+artifacts to `dist/` and independently verifies both package signatures and payload digests.
+
+Pushing a tag matching `v0.0.1-dev.YYYYMMDDHHMM` runs
+`.github/workflows/dev-release.yml`. The workflow tests the repository, builds and verifies both
+signed packages, retains a workflow artifact, and publishes the files as a GitHub prerelease. Add
+the one-line base64 contents of `.local/publisher.key` as the repository Actions secret
+`CONNECT_PUBLISHER_PRIVATE_KEY`. The workflow requests only `contents: write` for release upload;
+the signing key is never committed or printed.

@@ -6,6 +6,7 @@
 dist/
 coverage/
 node_modules/
+__pycache__/
 *.key
 *.pem
 *.p12
