@@ -109,3 +109,4 @@ jobs:
               --verify-tag \
               --title "Connect $VERSION" \
               --notes "Initial signed foundation release for the ZBoard and ZNet Sink package hosts. Package verification and installation surfaces are available; account authorization, subscription delivery, and provider messages remain disabled until the required host APIs land."
+          fi
