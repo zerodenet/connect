@@ -1,18 +1,18 @@
-# Provider Bridge
+# Connect
 
-Provider Bridge is a host-neutral integration protocol plus reference adapters for connecting a
+Connect is a host-neutral integration protocol plus reference adapters for connecting a
 subscription provider to a client. Panels and clients sit at the edge of this contract; the
 protocol does not depend on a particular panel brand or proxy kernel.
 
 The first repository release ships two packages:
 
-- `org.zerodenet.provider-bridge.zboard`: provider-side reference adapter for ZBoard.
-- `org.zerodenet.provider-bridge.znet-sink`: client-side reference adapter for ZNet Sink.
+- `org.zerodenet.connect.zboard`: provider-side reference adapter for ZBoard.
+- `org.zerodenet.connect.znet-sink`: client-side reference adapter for ZNet Sink.
 
 A different panel can connect by implementing the provider side of the published protocol. A
 different client can implement the consumer side and map delivered subscriptions into its own
 configuration pipeline. Kernel selection and execution remain entirely behind the client host;
-changing Zero to another kernel does not change the Provider Bridge protocol.
+changing Zero to another kernel does not change the Connect protocol.
 
 The first release authorizes an account, registers a device, renews that authorization, lists
 entitled subscriptions, delivers a selected subscription through the client's existing

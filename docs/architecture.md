@@ -1,9 +1,9 @@
 # Architecture boundary
 
-Provider Bridge has two interoperable roles and host-specific adapters:
+Connect has two interoperable roles and host-specific adapters:
 
 ```text
-provider implementation -> Provider Bridge protocol -> client adapter
+provider implementation -> Connect protocol -> client adapter
 client adapter -> managed source -> existing subscription sync -> client configuration -> selected kernel
 ```
 

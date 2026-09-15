@@ -1,8 +1,8 @@
 # Repository guidelines
 
-This repository produces the host-neutral Provider Bridge protocol and independently signed host
-adapters. The first marketplace product contains `org.zerodenet.provider-bridge.zboard` for ZBoard
-and `org.zerodenet.provider-bridge.znet-sink` for ZNet Sink.
+This repository produces the host-neutral Connect protocol and independently signed host adapters.
+The first marketplace product contains `org.zerodenet.connect.zboard` for ZBoard and
+`org.zerodenet.connect.znet-sink` for ZNet Sink.
 Keep shared wire semantics under `protocol/`, ZBoard code under `zboard/`, ZNet Sink code under
 `znet-sink/`, and cross-host fixtures under `tests/interop/`.
 

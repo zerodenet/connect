@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "id": "org.zerodenet.provider-bridge.zboard",
-  "name": "Provider Bridge for ZBoard",
-  "description": "Reference provider adapter that authorizes compatible clients and serves entitled subscriptions and read-only messages over Provider Bridge.",
+  "id": "org.zerodenet.connect.zboard",
+  "name": "Connect for ZBoard",
+  "description": "Reference provider adapter that authorizes compatible clients and serves entitled subscriptions and read-only messages over Connect.",
   "version": "0.0.1",
   "requires": {
     "zboard": ">=0.0.2 <0.1.0",
@@ -27,7 +27,7 @@
     },
     "server": {
       "executables": {
-        "linux-amd64": "runtimes/linux-amd64/provider-bridge"
+        "linux-amd64": "runtimes/linux-amd64/connect"
       }
     }
   },

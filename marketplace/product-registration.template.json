@@ -1,6 +1,6 @@
 {
-  "id": "org.zerodenet.provider-bridge",
-  "name": "Provider Bridge",
+  "id": "org.zerodenet.connect",
+  "name": "Connect",
   "description": "Connects compatible subscription providers and clients for device authorization, managed subscription synchronization, and read-only provider messages.",
   "categories": [
     "integration",
@@ -10,9 +10,9 @@
   "maintainers": [
     "zerodenet"
   ],
-  "repository": "https://github.com/zerodenet/provider-bridge",
-  "documentation": "https://github.com/zerodenet/provider-bridge/blob/main/README.md",
-  "security": "https://github.com/zerodenet/provider-bridge/blob/main/SECURITY.md",
+  "repository": "https://github.com/zerodenet/connect",
+  "documentation": "https://github.com/zerodenet/connect/blob/main/README.md",
+  "security": "https://github.com/zerodenet/connect/blob/main/SECURITY.md",
   "publisher": {
     "id": "zerodenet",
     "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -24,7 +24,7 @@
   "targets": [
     {
       "host": "zboard",
-      "package_id": "org.zerodenet.provider-bridge.zboard",
+      "package_id": "org.zerodenet.connect.zboard",
       "surfaces": [
         "account",
         "admin"
@@ -37,7 +37,7 @@
     },
     {
       "host": "znet-sink",
-      "package_id": "org.zerodenet.provider-bridge.znet-sink",
+      "package_id": "org.zerodenet.connect.znet-sink",
       "surfaces": [],
       "capabilities": [
         "network.request"
