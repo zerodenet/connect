@@ -11,6 +11,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 zboard_repo=${ZBOARD_REPO:-/Volumes/tool/golang/.codex-worktrees/zboard-unified-marketplace}
 znet_sink_repo=${ZNET_SINK_REPO:-/Volumes/tool/rust/.codex-worktrees/gui-unified-marketplace}
 marketplace_repo=${MARKETPLACE_REPO:-/Volumes/tool/.codex-worktrees/plugins-unified-marketplace}
+cargo_target_dir=${CARGO_TARGET_DIR:-$znet_sink_repo/src-tauri/target}
 published_at=${PUBLISHED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
 source_commit=$(git -C "$repo_root" rev-parse HEAD)
 public_key=$(tr -d '\r\n' < "$repo_root/.local/publisher.key.pub")
@@ -28,11 +29,11 @@ python3 "$repo_root/scripts/prepare_dev.py" \
 mkdir -p "$repo_root/.build/tools" "$repo_root/dist"
 go -C "$zboard_repo" build -o "$repo_root/.build/tools/zboard-pluginpackager" ./backend/tools/pluginpackager
 
-cargo build \
+CARGO_TARGET_DIR="$cargo_target_dir" cargo build \
   --manifest-path "$znet_sink_repo/src-tauri/Cargo.toml" \
   -p znet-plugin-sandbox \
   --bin znet-plugin
-znet_plugin="$znet_sink_repo/src-tauri/target/debug/znet-plugin"
+znet_plugin="$cargo_target_dir/debug/znet-plugin"
 
 zboard_package="$repo_root/dist/org.zerodenet.connect.zboard-${version}-linux-amd64.zbplugin"
 sink_package="$repo_root/dist/org.zerodenet.connect.znet-sink-${version}-any.zspkg"
