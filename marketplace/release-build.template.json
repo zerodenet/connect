@@ -1,0 +1,83 @@
+{
+  "product_id": "org.zerodenet.zboard",
+  "repository": "https://github.com/zerodenet/zboard-plugin",
+  "publisher": {
+    "id": "zerodenet",
+    "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  },
+  "source_commit": "0000000000000000000000000000000000000000",
+  "channel": "dev",
+  "published_at": "2026-09-15T00:00:00Z",
+  "notes_url": "https://github.com/zerodenet/zboard-plugin/releases/tag/v0.0.1",
+  "host_versions": {
+    "zboard": {
+      "min": "0.0.2",
+      "max_exclusive": "0.1.0"
+    },
+    "znet-sink": {
+      "min": "0.0.2",
+      "max_exclusive": "0.1.0"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "../dist/org.zerodenet.zboard.server-linux-amd64.zbplugin",
+      "url": "https://github.com/zerodenet/zboard-plugin/releases/download/v0.0.1/org.zerodenet.zboard.server-linux-amd64.zbplugin",
+      "os": "linux",
+      "arch": "amd64"
+    },
+    {
+      "path": "../dist/org.zerodenet.zboard-any.zspkg",
+      "url": "https://github.com/zerodenet/zboard-plugin/releases/download/v0.0.1/org.zerodenet.zboard-any.zspkg",
+      "os": "any",
+      "arch": "any"
+    }
+  ],
+  "listing": {
+    "id": "org.zerodenet.zboard",
+    "name": "ZBoard for ZNet Sink",
+    "description": "Connects explicitly configured ZBoard sources to ZNet Sink for device authorization, managed subscription synchronization, and read-only source messages.",
+    "categories": [
+      "integration",
+      "network"
+    ],
+    "license": "MPL-2.0",
+    "maintainers": [
+      "zerodenet"
+    ],
+    "repository": "https://github.com/zerodenet/zboard-plugin",
+    "documentation": "https://github.com/zerodenet/zboard-plugin/blob/main/README.md",
+    "security": "https://github.com/zerodenet/zboard-plugin/blob/main/SECURITY.md",
+    "publisher": {
+      "id": "zerodenet",
+      "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    },
+    "release_source": {
+      "type": "github-releases",
+      "metadata_asset": "marketplace-entry.json"
+    },
+    "targets": [
+      {
+        "host": "zboard",
+        "package_id": "org.zerodenet.zboard.server",
+        "surfaces": [
+          "account",
+          "admin"
+        ],
+        "capabilities": [
+          "zboard.ui.page.v1",
+          "zboard.config.v1",
+          "zboard.storage.v1"
+        ]
+      },
+      {
+        "host": "znet-sink",
+        "package_id": "org.zerodenet.zboard",
+        "surfaces": [],
+        "capabilities": [
+          "network.request"
+        ]
+      }
+    ]
+  }
+}

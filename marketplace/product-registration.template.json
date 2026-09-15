@@ -1,0 +1,47 @@
+{
+  "id": "org.zerodenet.zboard",
+  "name": "ZBoard for ZNet Sink",
+  "description": "Connects explicitly configured ZBoard sources to ZNet Sink for device authorization, managed subscription synchronization, and read-only source messages.",
+  "categories": [
+    "integration",
+    "network"
+  ],
+  "license": "MPL-2.0",
+  "maintainers": [
+    "zerodenet"
+  ],
+  "repository": "https://github.com/zerodenet/zboard-plugin",
+  "documentation": "https://github.com/zerodenet/zboard-plugin/blob/main/README.md",
+  "security": "https://github.com/zerodenet/zboard-plugin/blob/main/SECURITY.md",
+  "publisher": {
+    "id": "zerodenet",
+    "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  },
+  "release_source": {
+    "type": "github-releases",
+    "metadata_asset": "marketplace-entry.json"
+  },
+  "targets": [
+    {
+      "host": "zboard",
+      "package_id": "org.zerodenet.zboard.server",
+      "surfaces": [
+        "account",
+        "admin"
+      ],
+      "capabilities": [
+        "zboard.ui.page.v1",
+        "zboard.config.v1",
+        "zboard.storage.v1"
+      ]
+    },
+    {
+      "host": "znet-sink",
+      "package_id": "org.zerodenet.zboard",
+      "surfaces": [],
+      "capabilities": [
+        "network.request"
+      ]
+    }
+  ]
+}

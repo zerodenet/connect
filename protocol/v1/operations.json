@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "status": "p0-draft",
+  "product_id": "org.zerodenet.zboard",
+  "packages": {
+    "zboard": "org.zerodenet.zboard.server",
+    "znet-sink": "org.zerodenet.zboard"
+  },
+  "public_route_metadata": [
+    "protocol_version",
+    "key_id",
+    "request_id",
+    "content_length"
+  ],
+  "sensitive_fields": [
+    "password",
+    "device_private_key",
+    "device_proof",
+    "session_credential",
+    "renewal_credential",
+    "subscription_content",
+    "message_body",
+    "business_error_detail"
+  ],
+  "operations": [
+    {
+      "id": "capabilities.get",
+      "session": "none",
+      "idempotency": "safe",
+      "response_sensitivity": "public"
+    },
+    {
+      "id": "authorization.password",
+      "session": "none",
+      "idempotency": "request-id",
+      "response_sensitivity": "secret"
+    },
+    {
+      "id": "authorization.renew",
+      "session": "renewal",
+      "idempotency": "request-id-with-recovery",
+      "response_sensitivity": "secret"
+    },
+    {
+      "id": "authorization.revoke-device",
+      "session": "access",
+      "idempotency": "request-id",
+      "response_sensitivity": "private"
+    },
+    {
+      "id": "authorization.clear-user",
+      "session": "access",
+      "idempotency": "request-id",
+      "response_sensitivity": "private"
+    },
+    {
+      "id": "authorization.clear-all",
+      "session": "admin",
+      "idempotency": "request-id",
+      "response_sensitivity": "private"
+    },
+    {
+      "id": "devices.list",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "private"
+    },
+    {
+      "id": "subscriptions.list",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "private"
+    },
+    {
+      "id": "subscriptions.get-content",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "secret"
+    },
+    {
+      "id": "messages.list",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "private"
+    },
+    {
+      "id": "messages.get",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "secret"
+    },
+    {
+      "id": "messages.mark-read",
+      "session": "access",
+      "idempotency": "request-id",
+      "response_sensitivity": "private"
+    }
+  ],
+  "errors": [
+    "invalid_request",
+    "unsupported_version",
+    "communication_disabled",
+    "trust_mismatch",
+    "invalid_credentials",
+    "reauthorization_required",
+    "authorization_revoked",
+    "replay_rejected",
+    "unauthorized",
+    "forbidden",
+    "not_found",
+    "conflict",
+    "rate_limited",
+    "temporary_unavailable"
+  ]
+}

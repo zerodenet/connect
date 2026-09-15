@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "host": "znet-sink",
+  "plugin_id": "org.zerodenet.zboard",
+  "component_id": "zboard-source",
+  "version": "0.0.1",
+  "requires_host": ">=0.0.2, <0.1.0",
+  "api_version": 1,
+  "runtime": "javascript-v1",
+  "minimum_isolation": "vm",
+  "targets": "any",
+  "required": [
+    {
+      "capability": "network.request",
+      "scope": "https://panel.example.com"
+    }
+  ],
+  "optional": [],
+  "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "limits": {
+    "memory_bytes": 33554432,
+    "stack_bytes": 524288,
+    "timeout_ms": 2000,
+    "max_calls": 32,
+    "output_bytes": 65536
+  }
+}

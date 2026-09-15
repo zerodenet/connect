@@ -1,0 +1,15 @@
+.DS_Store
+.idea/
+.vscode/
+.local/
+.build/
+dist/
+coverage/
+node_modules/
+*.key
+*.pem
+*.p12
+*.pfx
+*.zbplugin
+*.zspkg
+marketplace-entry.json
