@@ -13,7 +13,7 @@ the plugin stores only opaque credential digests. The account page uses the gene
 page-action bridge to list and revoke only the current user's devices.
 
 The ZBoard package is distributable as a signed development build. ZBoard
-`v0.0.2-rc.202609201141` exposes the generic route, account-assertion, subscription-projection and
+`v0.0.2-rc.202609201158` exposes the generic route, account-assertion, subscription-projection and
 message-projection capabilities consumed by this runtime. Installed-package and cross-host
 acceptance pass without Connect-specific ZBoard source changes.
 

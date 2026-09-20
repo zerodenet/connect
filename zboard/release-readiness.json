@@ -17,7 +17,7 @@
       "package_probe": "passed"
     },
     "zboard": {
-      "commit": "7182680aa9d2bb3bd9f85ecc51c42051d2d1d619",
+      "commit": "0bb6a355fc89fb643419cea8944c7eb1ae463431",
       "clean": true,
       "package_probe": "passed"
     }

@@ -24,7 +24,7 @@ The current acceptance baseline is deliberately stricter than the historical pla
 | Host | Clean committed baseline | Result with the current Connect package |
 | --- | --- | --- |
 | ZNet Sink | `8e1972cbfe15579dee631caa607f0a2c4d1fff25` | signed package import and managed-provider flow passed |
-| ZBoard | `7182680aa9d2bb3bd9f85ecc51c42051d2d1d619` (`v0.0.2-rc.202609201141`) | signed package import, dynamic route lifecycle and provider runtime passed |
+| ZBoard | `0bb6a355fc89fb643419cea8944c7eb1ae463431` (`v0.0.2-rc.202609201158`) | signed package import, dynamic route lifecycle and provider runtime passed; release assets published |
 
 Neither baseline may be replaced by a dirty host worktree when recording release readiness. The
 same packages also passed the cross-host authorization, subscription and message flow. The detailed

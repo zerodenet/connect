@@ -6,7 +6,7 @@ endpoints. The former P0 gaps are resolved in the committed baselines below.
 
 ## ZBoard
 
-ZBoard `v0.0.2-rc.202609201141` provides:
+ZBoard `v0.0.2-rc.202609201158` provides:
 
 - exact manifest-declared public HTTP routes with enable-time conflict detection, request bounds,
   and immediate removal on disable or uninstall;
