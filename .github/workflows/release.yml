@@ -108,5 +108,5 @@ jobs:
             gh release create "$tag" "${assets[@]}" \
               --verify-tag \
               --title "Connect $VERSION" \
-              --notes "Initial signed foundation release for the ZBoard and ZNet Sink package hosts. Package verification and installation surfaces are available; account authorization, subscription delivery, and provider messages remain disabled until the required host APIs land."
+              --notes "Signed Connect release for ZBoard and ZNet Sink with device authorization, managed subscription synchronization, and read-only provider messages."
           fi

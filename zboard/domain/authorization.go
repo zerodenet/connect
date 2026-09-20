@@ -47,7 +47,7 @@ type PasswordAuthorization struct {
 }
 
 func NewPasswordAuthorizedDevice(input PasswordAuthorization, epochs Epochs, now time.Time) (DeviceRecord, error) {
-	if blank(input.DeviceID) || blank(input.UserID) || blank(input.SourceID) || blank(input.PublicKey) || blank(input.LoginIP) || now.IsZero() {
+	if blank(input.DeviceID) || blank(input.UserID) || blank(input.SourceID) || blank(input.PublicKey) || now.IsZero() {
 		return DeviceRecord{}, ErrInvalidAuthorization
 	}
 	return DeviceRecord{

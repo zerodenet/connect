@@ -14,7 +14,11 @@
   "capabilities": [
     "zboard.ui.page.v1",
     "zboard.config.v1",
-    "zboard.storage.v1"
+    "zboard.storage.v1",
+    "zboard.http.route.v1",
+    "zboard.account.assertion.v1",
+    "zboard.subscription.projection.v1",
+    "zboard.message.projection.v1"
   ],
   "surfaces": [
     "account",
@@ -27,9 +31,23 @@
     },
     "server": {
       "executables": {
-        "linux-amd64": "runtimes/linux-amd64/connect"
+        "linux-amd64": "runtimes/linux-amd64/connect",
+        "linux-arm64": "runtimes/linux-arm64/connect",
+        "darwin-amd64": "runtimes/darwin-amd64/connect",
+        "darwin-arm64": "runtimes/darwin-arm64/connect",
+        "windows-amd64": "runtimes/windows-amd64/connect.exe"
       }
     }
+  },
+  "data": {
+    "version": 1,
+    "min_compatible_version": 1,
+    "migrations": [
+      {
+        "version": 1,
+        "changes": []
+      }
+    ]
   },
   "contributions": {
     "pages": [
@@ -44,6 +62,18 @@
         "surface": "admin",
         "title": "客户端通信",
         "purpose": "configuration"
+      }
+    ],
+    "http_routes": [
+      {
+        "id": "capabilities",
+        "method": "GET",
+        "path": "/.well-known/zerodenet-connect/v1/capabilities"
+      },
+      {
+        "id": "exchange",
+        "method": "POST",
+        "path": "/.well-known/zerodenet-connect/v1/exchange"
       }
     ]
   },

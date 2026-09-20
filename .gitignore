@@ -4,9 +4,11 @@
 .local/
 .build/
 dist/
+zboard/runtime/bin/
 coverage/
 node_modules/
 __pycache__/
+**/target/
 *.key
 *.pem
 *.p12

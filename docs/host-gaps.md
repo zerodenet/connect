@@ -1,37 +1,42 @@
-# P0 reference-adapter host capability gaps
+# P0 reference-adapter host capability resolution
 
-Packaging is blocked until these are resolved as generic host capabilities. The names below are
-responsibilities, not reserved API identifiers.
+Connect remains a plugin: it consumes provider-neutral capabilities supplied independently by each
+host and does not import host internals, modify host business tables, or call private application
+endpoints. The former P0 gaps are resolved in the committed baselines below.
 
 ## ZBoard
 
-Current code exposes page, configuration, encrypted private storage, and identity-provider
-capabilities. The initial ZBoard provider adapter additionally needs:
+ZBoard `v0.0.2-rc.202609201141` provides:
 
-- declarative, host-governed plugin HTTP routes with lifecycle shutdown and request limits;
-- password verification that returns only a user assertion, never hashes or a general host token;
-- current entitled-subscription listing and rendering for one asserted user;
-- current announcement/private-message listing and detail projection with audience checks;
-- authenticated account/admin page context and trusted client-IP projection;
-- atomic plugin storage operations adequate for global/user revocation epochs and multi-instance
-  compare-and-swap behavior;
-- server secret generation/storage suitable for the plugin communication private key.
+- exact manifest-declared public HTTP routes with enable-time conflict detection, request bounds,
+  and immediate removal on disable or uninstall;
+- bounded password verification returning an account assertion, never a password hash or general
+  host token;
+- entitled-subscription and read-only message projections through application-owned services;
+- authenticated page actions with opaque actor context;
+- plugin-private storage and server runtime lifecycle.
+
+The API is generic and is published as
+`github.com/zerodenet/zboard/backend/pkg/pluginapi v0.0.1`. Connect registers its own well-known
+paths in its signed manifest; ZBoard contains no Connect plugin ID or Connect-specific route.
 
 ## ZNet Sink
 
-Current code exposes a bounded JavaScript VM and controlled `network.request`, but its manifest
-uses a statically declared origin. The initial ZNet Sink client adapter additionally needs:
+ZNet Sink commit `8e1972cbfe15579dee631caa607f0a2c4d1fff25` provides:
 
-- user-approved dynamic origin bindings for configured compatible providers;
-- secret input and opaque secret/device-key handles that survive restart without exposing values;
-- maintained cryptographic operations suitable for the frozen wire protocol;
-- declared plugin pages/forms and safe internal route navigation;
-- background task registration through the existing scheduler, including cancellation and
-  generation/authorization checks;
-- a source-provider binding that can create or reuse a managed subscription and call the single
-  existing synchronization path;
-- notifications with source identity, deduplication state, and safe plugin-detail targets.
+- configured-origin HTTPS requests;
+- host-encrypted persistent credentials and non-exported device cryptography;
+- stable managed-subscription identity keyed by plugin, provider and remote subscription;
+- owner-checked removal, host notifications, isolated plugin storage, and durable scheduled tasks.
 
-The first host changes should be narrow capability contracts with negative tests. They must not
-add provider-brand branches to generic runtime, encode a kernel in the shared protocol, or create
-a second configuration/scheduler backend.
+The ordinary configuration schema stores only the host-validated provider origins. Passwords remain
+transient, device private keys remain host-owned, and one source cannot overwrite a manual or
+foreign-plugin subscription.
+
+## Acceptance
+
+Installed-package tests pass independently on each committed host. Cross-host acceptance installs
+the same signed packages and completes provider discovery, device authorization, renewal,
+subscription projection/application, and read-only message synchronization without host source
+changes. These results open development packaging; they do not claim production deployment or
+compatibility with hosts that have not implemented the required public capabilities.

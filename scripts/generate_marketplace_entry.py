@@ -13,7 +13,10 @@ HOSTS = {"zboard", "znet-sink"}
 CHANNELS = {"stable", "rc", "dev"}
 OPERATING_SYSTEMS = {"any", "linux", "darwin", "windows", "android", "ios"}
 ARCHITECTURES = {"any", "amd64", "arm64"}
-SURFACES = {"zboard": {"admin", "public", "account"}, "znet-sink": set()}
+SURFACES = {
+    "zboard": {"admin", "public", "account"},
+    "znet-sink": {"znet-sink.ui.management.v1"},
+}
 ID = re.compile(r"[a-z0-9][a-z0-9._-]{1,159}")
 SEMVER = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
 COMMIT = re.compile(r"[a-f0-9]{40}")
@@ -199,7 +202,8 @@ def read_zboard(path):
 
 def read_znet_sink(path):
     envelope = json.loads(path.read_text())
-    if envelope.get("format") != "znet-sink.plugin-package.v1":
+    package_format = envelope.get("format")
+    if package_format not in {"znet-sink.plugin-package.v1", "znet-sink.plugin-package.v2"}:
         raise ValueError("unsupported ZNet Sink package")
     payload = json.loads(base64.b64decode(envelope["payload"], validate=True))
     if payload.get("host") != "znet-sink" or not payload.get("components"):
@@ -211,8 +215,25 @@ def read_znet_sink(path):
             raise ValueError("ZNet Sink component identity differs from package")
         capabilities.update(permission["capability"] for permission in manifest.get("required", []))
         capabilities.update(permission["capability"] for permission in manifest.get("optional", []))
+    surfaces = []
+    if package_format == "znet-sink.plugin-package.v2":
+        registration = envelope.get("registration")
+        fields(registration, (
+            "product_id", "id", "repository", "publisher", "name", "description", "license",
+            "maintainers", "homepage", "documentation", "security", "release_source", "surfaces",
+            "capabilities",
+        ), ("releases",))
+        require(registration["id"] == payload["plugin_id"], "embedded registration identity differs")
+        validate_publisher(registration["publisher"])
+        require(set(registration["capabilities"]) == capabilities,
+                "embedded registration capability ceiling differs")
+        surfaces = registration["surfaces"]
+        require(surfaces == ["znet-sink.ui.management.v1"], "embedded registration surface differs")
+        require(any(page.get("id") == "manage" and page.get("kind") == "management"
+                    and text(page.get("html"), 512 * 1024) for page in payload.get("pages", [])),
+                "signed management page is missing")
     return {"host": "znet-sink", "package_id": payload["plugin_id"], "version": payload["version"],
-            "surfaces": [], "capabilities": sorted(capabilities), "signature": envelope["signature"]}
+            "surfaces": surfaces, "capabilities": sorted(capabilities), "signature": envelope["signature"]}
 
 
 def inspect(path):

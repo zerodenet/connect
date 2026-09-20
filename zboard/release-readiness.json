@@ -1,0 +1,34 @@
+{
+  "accepted": true,
+  "checks": [
+    "host_apis",
+    "server_runtime",
+    "device_authorization",
+    "subscription_projection",
+    "message_synchronization",
+    "client_e2e"
+  ],
+  "blocked_reason": "",
+  "host_source_changes": false,
+  "host_baselines": {
+    "znet-sink": {
+      "commit": "8e1972cbfe15579dee631caa607f0a2c4d1fff25",
+      "clean": true,
+      "package_probe": "passed"
+    },
+    "zboard": {
+      "commit": "7182680aa9d2bb3bd9f85ecc51c42051d2d1d619",
+      "clean": true,
+      "package_probe": "passed"
+    }
+  },
+  "evidence": {
+    "repository": "make check",
+    "clean_zboard_capability_probe": "ZBOARD_ROOT=/path/to/clean/zboard make probe-clean-zboard",
+    "clean_znet_capability_probe": "ZNET_GUI_ROOT=/path/to/clean/gui make probe-clean-znet",
+    "zboard_installed_package": "make acceptance-zboard",
+    "znet_installed_package": "make acceptance-znet",
+    "management_flow": "make acceptance-management",
+    "cross_host": "make acceptance-cross-host"
+  }
+}

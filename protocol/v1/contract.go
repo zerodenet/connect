@@ -3,10 +3,17 @@ package protocolv1
 import (
 	_ "embed"
 	"encoding/json"
+	"sync"
 )
 
 //go:embed operations.json
 var rawContract []byte
+
+var (
+	contractOnce sync.Once
+	contractData Contract
+	contractErr  error
+)
 
 type Contract struct {
 	SchemaVersion       int               `json:"schema_version"`
@@ -27,7 +34,8 @@ type Operation struct {
 }
 
 func Load() (Contract, error) {
-	var contract Contract
-	err := json.Unmarshal(rawContract, &contract)
-	return contract, err
+	contractOnce.Do(func() {
+		contractErr = json.Unmarshal(rawContract, &contractData)
+	})
+	return contractData, contractErr
 }

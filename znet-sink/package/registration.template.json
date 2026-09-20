@@ -1,0 +1,36 @@
+{
+  "product_id": "org.zerodenet.connect",
+  "id": "org.zerodenet.connect.znet-sink",
+  "repository": "https://github.com/zerodenet/connect",
+  "publisher": {
+    "id": "zerodenet",
+    "public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  },
+  "name": "Connect",
+  "description": "Connects ZNet Sink to compatible subscription providers for device authorization, managed subscription synchronization, and read-only provider messages.",
+  "license": "MPL-2.0",
+  "maintainers": [
+    "zerodenet"
+  ],
+  "homepage": null,
+  "documentation": "https://github.com/zerodenet/connect/blob/main/README.md",
+  "security": "https://github.com/zerodenet/connect/blob/main/SECURITY.md",
+  "release_source": {
+    "type": "github-releases",
+    "metadata_asset": "marketplace-entry.json"
+  },
+  "surfaces": [
+    "znet-sink.ui.management.v1"
+  ],
+  "capabilities": [
+    "network.configured.request",
+    "secrets.persistent.read",
+    "secrets.persistent.write",
+    "crypto.device.use",
+    "subscriptions.manage",
+    "plugin.storage.read",
+    "plugin.storage.write",
+    "notifications.post",
+    "tasks.schedule"
+  ]
+}

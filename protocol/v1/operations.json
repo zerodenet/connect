@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "p0-draft",
+  "status": "p0-wire-v1-frozen",
   "product_id": "org.zerodenet.connect",
   "packages": {
     "zboard": "org.zerodenet.connect.zboard",

@@ -7,7 +7,7 @@ func TestContractInventoryIsCompleteAndUnique(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contract.SchemaVersion != 1 || contract.Status != "p0-draft" {
+	if contract.SchemaVersion != 1 || contract.Status != "p0-wire-v1-frozen" {
 		t.Fatalf("unexpected contract header: %#v", contract)
 	}
 	if contract.ProductID != "org.zerodenet.connect" {

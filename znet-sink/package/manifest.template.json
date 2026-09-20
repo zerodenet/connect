@@ -11,11 +11,60 @@
   "targets": "any",
   "required": [
     {
-      "capability": "network.request",
-      "scope": "https://panel.example.com"
+      "capability": "network.configured.request",
+      "scope": "provider_origins"
+    },
+    {
+      "capability": "secrets.persistent.read",
+      "scope": "self"
+    },
+    {
+      "capability": "secrets.persistent.write",
+      "scope": "self"
+    },
+    {
+      "capability": "crypto.device.use",
+      "scope": "self"
+    },
+    {
+      "capability": "subscriptions.manage",
+      "scope": "self"
+    },
+    {
+      "capability": "plugin.storage.read",
+      "scope": "self"
+    },
+    {
+      "capability": "plugin.storage.write",
+      "scope": "self"
+    },
+    {
+      "capability": "notifications.post",
+      "scope": "self"
+    },
+    {
+      "capability": "tasks.schedule",
+      "scope": "self"
     }
   ],
   "optional": [],
+  "lifecycle": [
+    "host_start"
+  ],
+  "configuration": {
+    "title": "Connect 来源配置",
+    "description": "先添加 ZBoard 服务地址。保存后在 Connect 管理页完成服务身份验证、账号授权、订阅选择与关联；设备密钥和会话凭据由客户端加密保管。",
+    "fields": [
+      {
+        "id": "provider_origins",
+        "label": "已授权服务地址",
+        "description": "由 Connect 管理页面维护的 HTTPS 来源集合，不需要手工编辑。",
+        "kind": "https_origin_list",
+        "required": false,
+        "default": "[]"
+      }
+    ]
+  },
   "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "limits": {
     "memory_bytes": 33554432,

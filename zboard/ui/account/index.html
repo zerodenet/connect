@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Connect 客户端授权</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="page-heading compact">
+      <div>
+        <h1>客户端授权</h1>
+        <p>查看通过 Connect 登录此账号的设备，并撤销不再使用的授权。</p>
+      </div>
+      <button id="refresh" type="button">刷新</button>
+    </header>
+
+    <section id="notice" class="notice" role="status" hidden>
+      <div class="notice-mark" aria-hidden="true">i</div>
+      <div><strong id="notice-title"></strong><p id="notice-detail"></p></div>
+    </section>
+
+    <section class="panel">
+      <header><h2>已授权设备</h2><p>撤销后，该设备的访问与续期凭据都会立即失效。</p></header>
+      <div id="devices" class="device-list" aria-live="polite">
+        <p class="empty">正在读取授权设备…</p>
+      </div>
+    </section>
+
+    <p class="footnote">密码只用于一次账号验证，不会保存在 Connect 中。设备私钥始终由客户端保管。</p>
+  </main>
+  <script>
+    (() => {
+      const token = new URLSearchParams(location.hash.slice(1)).get('bridge_token');
+      let next = 1;
+      const pending = new Map();
+      const $ = id => document.getElementById(id);
+
+      addEventListener('message', event => {
+        const value = event.data;
+        if (event.source !== parent || !value || value.source !== 'zboard-plugin-host' || value.bridge_token !== token) return;
+        const item = pending.get(value.request_id);
+        if (!item) return;
+        pending.delete(value.request_id);
+        value.ok ? item.resolve(value.result) : item.reject(new Error(value.error || '宿主拒绝请求'));
+      });
+
+      function call(type, payload = {}) {
+        return new Promise((resolve, reject) => {
+          const request_id = `connect-${next++}`;
+          pending.set(request_id, {resolve, reject});
+          parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, request_id, type, ...payload}, '*');
+        });
+      }
+
+      function resize() {
+        parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, type:'ui.resize', height:document.documentElement.scrollHeight}, '*');
+      }
+
+      function notice(title, detail, error = false) {
+        $('notice').hidden = false;
+        $('notice').classList.toggle('error', error);
+        $('notice-title').textContent = title;
+        $('notice-detail').textContent = detail;
+        resize();
+      }
+
+      function time(value) {
+        if (!value) return '—';
+        return new Date(value * 1000).toLocaleString();
+      }
+
+      function render(items) {
+        $('devices').replaceChildren();
+        if (!items.length) {
+          const empty = document.createElement('p');
+          empty.className = 'empty';
+          empty.textContent = '当前账号还没有 Connect 授权设备。';
+          $('devices').append(empty);
+          resize();
+          return;
+        }
+        for (const item of items) {
+          const row = document.createElement('article');
+          row.className = 'device-row';
+          const info = document.createElement('div');
+          const title = document.createElement('strong');
+          title.textContent = item.device_name || '未命名设备';
+          const meta = document.createElement('p');
+          meta.textContent = `授权于 ${time(item.authorized_at)} · 最近活动 ${time(item.last_seen_at)}`;
+          const source = document.createElement('small');
+          source.textContent = `来源标识 ${item.source_id}`;
+          info.append(title, meta, source);
+          const action = document.createElement('button');
+          action.type = 'button';
+          action.textContent = item.revoked ? '已撤销' : '撤销';
+          action.disabled = item.revoked === true;
+          action.addEventListener('click', async () => {
+            action.disabled = true;
+            action.textContent = '正在撤销…';
+            try {
+              const result = await call('page.call', {action:'devices.revoke', payload:{device_id:item.device_id}});
+              if (!result.revoked) throw new Error('revoke failed');
+              await load();
+              notice('授权已撤销', '该设备需要重新使用账号密码授权后才能连接。');
+            } catch (error) {
+              action.disabled = false;
+              action.textContent = '撤销';
+              notice('撤销失败', '授权状态可能已变化，请刷新后重试。', true);
+            }
+          });
+          row.append(info, action);
+          $('devices').append(row);
+        }
+        resize();
+      }
+
+      async function load() {
+        $('refresh').disabled = true;
+        try {
+          const result = await call('page.call', {action:'devices.list', payload:{}});
+          if (result.error) throw new Error(result.error);
+          render(Array.isArray(result.devices) ? result.devices : []);
+        } catch (error) {
+          notice('无法读取设备', 'Connect 可能尚未启用，或扩展会话已经失效。', true);
+        } finally {
+          $('refresh').disabled = false;
+        }
+      }
+
+      $('refresh').addEventListener('click', load);
+      call('context.load').then(() => {
+        parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, request_id:`ready-${next++}`, type:'plugin.ready'}, '*');
+        return load();
+      }).catch(() => notice('页面不可用', '扩展会话已经失效，请重新加载。', true));
+    })();
+  </script>
+</body>
+</html>

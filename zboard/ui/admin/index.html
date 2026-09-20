@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Connect 客户端通信</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <header class="page-heading compact">
+      <div>
+        <h1>客户端通信</h1>
+        <p>配置设备授权、订阅投影和消息同步使用的公开来源地址。</p>
+      </div>
+      <span id="status" class="status-pill">未配置</span>
+    </header>
+
+    <section id="notice" class="notice" role="status" hidden>
+      <div class="notice-mark" aria-hidden="true">i</div>
+      <div><strong id="notice-title"></strong><p id="notice-detail"></p></div>
+    </section>
+
+    <form id="settings" class="panel form-panel">
+      <header><h2>连接设置</h2><p>配置由 ZBoard 加密保存；身份密钥和设备会话由插件私有存储管理。</p></header>
+      <div class="form-body">
+        <label class="switch-row">
+          <span><strong>启用 Connect</strong><small>开放签名能力发现与加密交换入口。</small></span>
+          <input id="enabled" type="checkbox">
+        </label>
+        <label class="field">
+          <span>服务来源</span>
+          <input id="provider-id" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://panel.example.com" required>
+          <small>必须是当前 ZBoard 对外可访问的 HTTPS 来源，不包含路径、查询参数或结尾斜杠。</small>
+        </label>
+        <label class="field">
+          <span>来源名称</span>
+          <input id="display-name" type="text" maxlength="80" autocomplete="off" placeholder="我的 ZBoard">
+          <small>客户端订阅设置中会用它区分不同来源。</small>
+        </label>
+      </div>
+      <footer class="form-actions">
+        <button id="save" class="primary" type="submit">保存设置</button>
+        <button id="test" type="button">验证已保存配置</button>
+        <span id="progress" aria-live="polite"></span>
+      </footer>
+    </form>
+
+    <section class="panel">
+      <header><h2>客户端入口</h2><p>客户端只需要填写来源地址；具体路径由协议固定。</p></header>
+      <dl class="status-list">
+        <div><dt>能力发现</dt><dd id="capabilities-url">保存来源后显示</dd></div>
+        <div><dt>加密交换</dt><dd id="exchange-url">保存来源后显示</dd></div>
+        <div><dt>服务能力</dt><dd>设备授权 · ZNet Sink 订阅 · 公告消息</dd></div>
+      </dl>
+    </section>
+
+    <p class="footnote">插件只通过受治理的宿主能力验证账号并投影当前账号可见数据，不会获得密码哈希、管理员令牌、数据库连接或核心表访问权。</p>
+  </main>
+  <script>
+    (() => {
+      const token = new URLSearchParams(location.hash.slice(1)).get('bridge_token');
+      let next = 1;
+      let revision = 0;
+      const pending = new Map();
+      const $ = id => document.getElementById(id);
+
+      addEventListener('message', event => {
+        const value = event.data;
+        if (event.source !== parent || !value || value.source !== 'zboard-plugin-host' || value.bridge_token !== token) return;
+        const item = pending.get(value.request_id);
+        if (!item) return;
+        pending.delete(value.request_id);
+        value.ok ? item.resolve(value.result) : item.reject(new Error(value.error || '宿主拒绝请求'));
+      });
+
+      function call(type, payload = {}) {
+        return new Promise((resolve, reject) => {
+          const request_id = `connect-${next++}`;
+          pending.set(request_id, {resolve, reject});
+          parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, request_id, type, ...payload}, '*');
+        });
+      }
+
+      function setBusy(busy, text = '') {
+        $('save').disabled = busy;
+        $('test').disabled = busy;
+        $('progress').textContent = text;
+      }
+
+      function showNotice(title, detail, error = false) {
+        $('notice').hidden = false;
+        $('notice').classList.toggle('error', error);
+        $('notice-title').textContent = title;
+        $('notice-detail').textContent = detail;
+        resize();
+      }
+
+      function renderEndpoint() {
+        const origin = $('provider-id').value.trim().replace(/\/$/, '');
+        $('capabilities-url').textContent = origin ? `${origin}/.well-known/zerodenet-connect/v1/capabilities` : '保存来源后显示';
+        $('exchange-url').textContent = origin ? `${origin}/.well-known/zerodenet-connect/v1/exchange` : '保存来源后显示';
+      }
+
+      function resize() {
+        parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, type:'ui.resize', height:document.documentElement.scrollHeight}, '*');
+      }
+
+      $('provider-id').addEventListener('input', renderEndpoint);
+      $('settings').addEventListener('submit', async event => {
+        event.preventDefault();
+        setBusy(true, '正在保存…');
+        const config = {
+          enabled: $('enabled').checked,
+          provider_id: $('provider-id').value.trim().replace(/\/$/, ''),
+          display_name: $('display-name').value.trim() || 'ZBoard'
+        };
+        try {
+          const result = await call('config.save', {revision, config});
+          revision = result.revision;
+          $('status').textContent = config.enabled ? '已启用' : '已停用';
+          $('status').className = `status-pill ${config.enabled ? 'success' : ''}`;
+          showNotice('设置已保存', config.enabled ? '客户端现在可以通过能力发现入口建立受保护连接。' : 'Connect 已停用，公开入口会返回通信未启用。');
+        } catch (error) {
+          showNotice('保存失败', '设置可能已被其他管理员更新，请重新打开页面后再试。', true);
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      $('test').addEventListener('click', async () => {
+        setBusy(true, '正在验证…');
+        try {
+          await call('config.test');
+          showNotice('配置有效', '插件运行时已接受当前保存的配置。');
+        } catch (error) {
+          showNotice('验证失败', '请检查 HTTPS 来源地址并先保存设置。', true);
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      Promise.all([call('context.load'), call('config.load')]).then(([, view]) => {
+        revision = view.revision || 0;
+        const config = view.config || {};
+        $('enabled').checked = config.enabled === true;
+        $('provider-id').value = typeof config.provider_id === 'string' ? config.provider_id : '';
+        $('display-name').value = typeof config.display_name === 'string' ? config.display_name : 'ZBoard';
+        $('status').textContent = !view.configured ? '未配置' : config.enabled ? '已启用' : '已停用';
+        $('status').className = `status-pill ${config.enabled ? 'success' : ''}`;
+        renderEndpoint();
+        parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, request_id:`ready-${next++}`, type:'plugin.ready'}, '*');
+        resize();
+      }).catch(() => showNotice('无法读取配置', '扩展会话可能已经失效，请重新加载页面。', true));
+    })();
+  </script>
+</body>
+</html>

@@ -32,15 +32,29 @@
       "capabilities": [
         "zboard.ui.page.v1",
         "zboard.config.v1",
-        "zboard.storage.v1"
+        "zboard.storage.v1",
+        "zboard.http.route.v1",
+        "zboard.account.assertion.v1",
+        "zboard.subscription.projection.v1",
+        "zboard.message.projection.v1"
       ]
     },
     {
       "host": "znet-sink",
       "package_id": "org.zerodenet.connect.znet-sink",
-      "surfaces": [],
+      "surfaces": [
+        "znet-sink.ui.management.v1"
+      ],
       "capabilities": [
-        "network.request"
+        "network.configured.request",
+        "secrets.persistent.read",
+        "secrets.persistent.write",
+        "crypto.device.use",
+        "subscriptions.manage",
+        "plugin.storage.read",
+        "plugin.storage.write",
+        "notifications.post",
+        "tasks.schedule"
       ]
     }
   ]

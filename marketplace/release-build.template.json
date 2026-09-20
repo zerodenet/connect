@@ -27,6 +27,30 @@
       "arch": "amd64"
     },
     {
+      "path": "../dist/org.zerodenet.connect.zboard-linux-arm64.zbplugin",
+      "url": "https://github.com/zerodenet/connect/releases/download/v0.0.1/org.zerodenet.connect.zboard-linux-arm64.zbplugin",
+      "os": "linux",
+      "arch": "arm64"
+    },
+    {
+      "path": "../dist/org.zerodenet.connect.zboard-darwin-amd64.zbplugin",
+      "url": "https://github.com/zerodenet/connect/releases/download/v0.0.1/org.zerodenet.connect.zboard-darwin-amd64.zbplugin",
+      "os": "darwin",
+      "arch": "amd64"
+    },
+    {
+      "path": "../dist/org.zerodenet.connect.zboard-darwin-arm64.zbplugin",
+      "url": "https://github.com/zerodenet/connect/releases/download/v0.0.1/org.zerodenet.connect.zboard-darwin-arm64.zbplugin",
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    {
+      "path": "../dist/org.zerodenet.connect.zboard-windows-amd64.zbplugin",
+      "url": "https://github.com/zerodenet/connect/releases/download/v0.0.1/org.zerodenet.connect.zboard-windows-amd64.zbplugin",
+      "os": "windows",
+      "arch": "amd64"
+    },
+    {
       "path": "../dist/org.zerodenet.connect.znet-sink-any.zspkg",
       "url": "https://github.com/zerodenet/connect/releases/download/v0.0.1/org.zerodenet.connect.znet-sink-any.zspkg",
       "os": "any",
@@ -67,15 +91,29 @@
         "capabilities": [
           "zboard.ui.page.v1",
           "zboard.config.v1",
-          "zboard.storage.v1"
+          "zboard.storage.v1",
+          "zboard.http.route.v1",
+          "zboard.account.assertion.v1",
+          "zboard.subscription.projection.v1",
+          "zboard.message.projection.v1"
         ]
       },
       {
         "host": "znet-sink",
         "package_id": "org.zerodenet.connect.znet-sink",
-        "surfaces": [],
+        "surfaces": [
+          "znet-sink.ui.management.v1"
+        ],
         "capabilities": [
-          "network.request"
+          "network.configured.request",
+          "secrets.persistent.read",
+          "secrets.persistent.write",
+          "crypto.device.use",
+          "subscriptions.manage",
+          "plugin.storage.read",
+          "plugin.storage.write",
+          "notifications.post",
+          "tasks.schedule"
         ]
       }
     ]

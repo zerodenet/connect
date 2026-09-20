@@ -1,0 +1,10 @@
+[package]
+name = "connect-znet-clean-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+znet-plugin-sandbox = { path = "../gui/src-tauri/crates/plugin-sandbox" }
+
+[workspace]

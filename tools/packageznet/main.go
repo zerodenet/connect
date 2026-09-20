@@ -15,7 +15,7 @@ import (
 	"github.com/zerodenet/connect/internal/devsigning"
 )
 
-const domain = "znet-sink.plugin-package.v1\x00"
+const domain = "znet-sink.plugin-package.v2\x00"
 
 type manifestIdentity struct {
 	SchemaVersion uint32 `json:"schema_version"`
@@ -31,18 +31,57 @@ type sourceComponent struct {
 	Source   string          `json:"source"`
 }
 
+type sourcePage struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Kind  string `json:"kind"`
+	HTML  string `json:"html"`
+}
+
 type payload struct {
 	SchemaVersion uint32            `json:"schema_version"`
 	Host          string            `json:"host"`
 	PluginID      string            `json:"plugin_id"`
 	Version       string            `json:"version"`
 	Components    []sourceComponent `json:"components"`
+	Pages         []sourcePage      `json:"pages,omitempty"`
 }
 
 type envelope struct {
-	Format    string `json:"format"`
-	Payload   string `json:"payload"`
-	Signature string `json:"signature"`
+	Format       string        `json:"format"`
+	Registration *registration `json:"registration"`
+	Payload      string        `json:"payload"`
+	Signature    string        `json:"signature"`
+}
+
+// Field order intentionally matches the ZNet Sink Registration structure.
+// The host re-serializes this signed object before verification.
+type registration struct {
+	ProductID     *string       `json:"product_id,omitempty"`
+	ID            string        `json:"id"`
+	Repository    string        `json:"repository"`
+	Publisher     publisher     `json:"publisher"`
+	Name          string        `json:"name"`
+	Description   string        `json:"description"`
+	License       string        `json:"license"`
+	Maintainers   []string      `json:"maintainers"`
+	Homepage      *string       `json:"homepage"`
+	Documentation *string       `json:"documentation"`
+	Security      *string       `json:"security"`
+	ReleaseSource releaseSource `json:"release_source"`
+	Surfaces      []string      `json:"surfaces"`
+	Capabilities  []string      `json:"capabilities"`
+	Releases      []any         `json:"releases,omitempty"`
+}
+
+type publisher struct {
+	ID        string `json:"id"`
+	PublicKey string `json:"public_key"`
+}
+
+type releaseSource struct {
+	Type          string `json:"type"`
+	MetadataAsset string `json:"metadata_asset"`
 }
 
 type releaseMetadata struct {
@@ -60,16 +99,20 @@ func main() {
 	keyPath := flag.String("key", "", "base64 Ed25519 private key")
 	output := flag.String("out", "", "new .zspkg output")
 	metadataPath := flag.String("metadata", "", "new release metadata output")
+	registrationPath := flag.String("registration", "", "embedded local-install publisher registration")
+	pagePath := flag.String("management-page", "", "optional signed management page HTML")
+	pageID := flag.String("management-page-id", "manage", "management page ID")
+	pageTitle := flag.String("management-page-title", "管理", "management page title")
 	flag.Parse()
-	if err := run(*manifestPath, *sourcePath, *keyPath, *output, *metadataPath); err != nil {
+	if err := run(*manifestPath, *sourcePath, *keyPath, *registrationPath, *output, *metadataPath, *pagePath, *pageID, *pageTitle); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(manifestPath, sourcePath, keyPath, output, metadataPath string) error {
-	if manifestPath == "" || sourcePath == "" || keyPath == "" || output == "" || metadataPath == "" || output == metadataPath {
-		return errors.New("manifest, source, key, out and metadata are required")
+func run(manifestPath, sourcePath, keyPath, registrationPath, output, metadataPath, pagePath, pageID, pageTitle string) error {
+	if manifestPath == "" || sourcePath == "" || keyPath == "" || registrationPath == "" || output == "" || metadataPath == "" || output == metadataPath {
+		return errors.New("manifest, source, key, registration, out and metadata are required")
 	}
 	manifestBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -94,6 +137,18 @@ func run(manifestPath, sourcePath, keyPath, output, metadataPath string) error {
 	if err != nil {
 		return err
 	}
+	registrationBytes, err := os.ReadFile(registrationPath)
+	if err != nil {
+		return err
+	}
+	var localRegistration registration
+	if err := json.Unmarshal(registrationBytes, &localRegistration); err != nil {
+		return err
+	}
+	localRegistration.Publisher.PublicKey = base64.StdEncoding.EncodeToString(key.Public().(ed25519.PublicKey))
+	if err := validateRegistration(localRegistration, identity.PluginID); err != nil {
+		return err
+	}
 	document := payload{
 		SchemaVersion: 1,
 		Host:          "znet-sink",
@@ -101,15 +156,32 @@ func run(manifestPath, sourcePath, keyPath, output, metadataPath string) error {
 		Version:       identity.Version,
 		Components:    []sourceComponent{{Manifest: json.RawMessage(manifestBytes), Source: string(sourceBytes)}},
 	}
+	if pagePath != "" {
+		pageBytes, err := os.ReadFile(pagePath)
+		if err != nil {
+			return err
+		}
+		if len(pageBytes) == 0 || len(pageBytes) > 512*1024 || !safeIdentifier(pageID) || pageTitle == "" || len(pageTitle) > 80 {
+			return errors.New("invalid management page")
+		}
+		document.Pages = []sourcePage{{ID: pageID, Title: pageTitle, Kind: "management", HTML: string(pageBytes)}}
+	}
 	payloadBytes, err := json.Marshal(document)
 	if err != nil {
 		return err
 	}
-	message := append([]byte(domain), payloadBytes...)
+	registrationBytes, err = json.Marshal(localRegistration)
+	if err != nil {
+		return err
+	}
+	message := append([]byte(domain), registrationBytes...)
+	message = append(message, 0)
+	message = append(message, payloadBytes...)
 	packageBytes, err := json.Marshal(envelope{
-		Format:    "znet-sink.plugin-package.v1",
-		Payload:   base64.StdEncoding.EncodeToString(payloadBytes),
-		Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(key, message)),
+		Format:       "znet-sink.plugin-package.v2",
+		Registration: &localRegistration,
+		Payload:      base64.StdEncoding.EncodeToString(payloadBytes),
+		Signature:    base64.StdEncoding.EncodeToString(ed25519.Sign(key, message)),
 	})
 	if err != nil {
 		return err
@@ -136,6 +208,28 @@ func run(manifestPath, sourcePath, keyPath, output, metadataPath string) error {
 	}
 	fmt.Printf("publisher public key: %s\n", devsigning.PublicKeyText(key))
 	return nil
+}
+
+func validateRegistration(value registration, pluginID string) error {
+	if value.ID != pluginID || value.Publisher.ID == "" || value.Name == "" || value.Description == "" ||
+		value.Repository == "" || value.License == "" || len(value.Maintainers) == 0 ||
+		value.ReleaseSource.Type != "github-releases" || value.ReleaseSource.MetadataAsset == "" ||
+		len(value.Surfaces) == 0 || len(value.Capabilities) == 0 {
+		return errors.New("invalid embedded local-install registration")
+	}
+	return nil
+}
+
+func safeIdentifier(value string) bool {
+	if value == "" || len(value) > 80 {
+		return false
+	}
+	for _, value := range []byte(value) {
+		if !((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9') || value == '.' || value == '_' || value == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func writeNew(path string, value []byte, mode os.FileMode) error {

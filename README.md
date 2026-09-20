@@ -16,7 +16,8 @@ changing Zero to another kernel does not change the Connect protocol.
 
 The first release authorizes an account, registers a device, renews that authorization, lists
 entitled subscriptions, delivers a selected subscription through the client's existing
-subscription-to-configuration pipeline, and presents provider messages as read-only notifications.
+subscription-to-configuration pipeline, and presents provider messages in a read-only client view
+with host notifications for newly unread items.
 
 ## Compatibility model
 
@@ -30,18 +31,23 @@ subscription-to-configuration pipeline, and presents provider messages as read-o
 
 ## Current status
 
-This initial repository implements the P0 foundation, not an installable v0.0.1 package. It
-contains stable product/package identities, a shared operation inventory, server-side
-authorization invariants, client-side source-binding commit guards, marketplace templates, and
-tests. The host capability gaps recorded in [docs/host-gaps.md](docs/host-gaps.md) intentionally
-block packaging until the two hosts expose the required generic APIs.
+This repository contains the P0 protocol and installable reference adapters for ZBoard and ZNet
+Sink. The ZBoard adapter serves its manifest-declared public routes through the host's generic
+plugin route API; the client adapter performs provider verification, device authorization, managed
+subscription application/manual refresh, read-only messages, and the same renewal/subscription/
+message chain under a host-owned scheduled task. The same signed packages have passed installed-
+host and cross-product acceptance on committed, unmodified host baselines.
+
+See [the clean-host capability audit](docs/clean-host-capability-audit.md) for the host boundary and
+[the plugin capability status](docs/plugin-capability-status.md) for what Connect itself already
+implements.
 
 ## Layout
 
 ```text
 protocol/       shared versioned protocol inventory; no host implementation
-zboard/         ZBoard package intent and server-side domain code
-znet-sink/      ZNet Sink package intent and client-side binding code
+zboard/         ZBoard package, native provider runtime, pages, and domain code
+znet-sink/      ZNet Sink component, signed management page, and binding code
 marketplace/    unified-product registration and release templates
 tests/interop/  cross-host contract checks and fixtures
 docs/           architecture, evidence baselines, gaps, and delivery status
@@ -53,32 +59,8 @@ Run the dependency-free checks with:
 make check
 ```
 
-Packaging, signing, publishing, and host installation are deliberately separate gates. No signing
-key belongs in this repository, and a published foundation package does not imply that its later
-business capabilities are implemented or accepted end to end.
-
-## Foundation packages
-
-The reproducible build creates two signed, installable foundation packages and one unified
-marketplace entry. It validates distribution wiring only; its UI and runtime explicitly report
-that authorization, subscription synchronization, and messages are not implemented. Packaging is
-self-contained in this repository and does not depend on local ZBoard, ZNet Sink, or marketplace
-checkouts.
-
-```sh
-make keygen
-make dev VERSION=0.0.1-dev.YYYYMMDDHHMM
-make release VERSION=0.0.1
-```
-
-`make keygen` writes one local publisher identity in `.local/` for both package formats. Keep it
-private and backed up; changing it creates a different publisher identity. The build writes ignored
-artifacts to `dist/` and independently verifies both package signatures and payload digests.
-
-Pushing a tag matching `v0.0.1-dev.YYYYMMDDHHMM` runs
-`.github/workflows/dev-release.yml`; a stable `vMAJOR.MINOR.PATCH` tag runs
-`.github/workflows/release.yml`. Each workflow tests the repository, builds and verifies both
-signed packages, retains a workflow artifact, and publishes the files in the matching GitHub
-Release channel. Add the one-line base64 contents of `.local/publisher.key` as the repository Actions secret
-`CONNECT_PUBLISHER_PRIVATE_KEY`. The workflow requests only `contents: write` for release upload;
-the signing key is never committed or printed.
+Packaging, signing, publishing, and host installation remain separate gates. No signing key belongs
+in this repository. `make dev VERSION=0.0.2-dev.YYYYMMDDHHMM` builds and independently verifies five
+ZBoard packages plus one ZNet Sink package only when `zboard/release-readiness.json` records the
+accepted committed host baselines. Publication still requires a release tag and a successful GitHub
+workflow; a local build alone is not a published Connect release.

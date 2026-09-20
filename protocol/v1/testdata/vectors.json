@@ -1,0 +1,46 @@
+{
+  "client_response": {
+    "key_seed": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+    "private_key": "PKphvBPlZHPpE6hcM89NYDrJmlF-6pXtRXPncrZENfc",
+    "public_key": "aTZYJUYw9zrY2nj7Mxv5ds1C-Q4OnJ6D9AxRBypvdBc"
+  },
+  "key_id": "provider-2026-09",
+  "provider": {
+    "key_seed": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "private_key": "kfekZ99O-XBT7CpHtuYZ9jLflUe7AJ_QvMdHkJ8be9Q",
+    "public_key": "sfG4QN56MkGwJ0jPmwW3TcjF6EUSmHOIF712qo6-jCs"
+  },
+  "request": {
+    "aad": "emVyb2RlbmV0LWNvbm5lY3QvdjEvcmVxdWVzdABwcm92aWRlci0yMDI2LTA5AE1ERXlNelExTmpjNE9XRmlZMlJsWmc",
+    "encapsulation_seed": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8",
+    "envelope": {
+      "protocol_version": 1,
+      "suite": "HPKE-0x0020-0x0001-0x0003",
+      "key_id": "provider-2026-09",
+      "request_id": "MDEyMzQ1Njc4OWFiY2RlZg",
+      "encapsulation": "sln27pLcugERhQsTs_bczIJ3JvmwgjWrYpIraz8_Khk",
+      "ciphertext": "0NDB5uFs5yTzFUMaKG-lixl1NobWgMn8o7IkDipEh89hdi0Uy4Uj12xCkEO6_UuUcqmRw7cnVXJ6HcJ6LMl_Ct-_H3adLJi8fjiLxJf2ZX_hkkvXkJQSzgSLESxjdB_mwK6ozjFah4boZcP42YUINb1S9B4F1QmIvPs"
+    },
+    "info": "emVyb2RlbmV0LWNvbm5lY3QvdjEvcmVxdWVzdC9wcm92aWRlci0yMDI2LTA5",
+    "mode": "base",
+    "plaintext": "eyJwcm90b2NvbF92ZXJzaW9uIjoxLCJvcGVyYXRpb24iOiJkZXZpY2VzLmxpc3QiLCJyZXF1ZXN0X2lkIjoiTURFeU16UTFOamM0T1dGaVkyUmxaZyIsInZlY3RvciI6InJlcXVlc3QifQ"
+  },
+  "request_id": "MDEyMzQ1Njc4OWFiY2RlZg",
+  "response": {
+    "aad": "emVyb2RlbmV0LWNvbm5lY3QvdjEvcmVzcG9uc2UAcHJvdmlkZXItMjAyNi0wOQBNREV5TXpRMU5qYzRPV0ZpWTJSbFpn",
+    "encapsulation_seed": "YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8",
+    "envelope": {
+      "protocol_version": 1,
+      "suite": "HPKE-0x0020-0x0001-0x0003",
+      "key_id": "provider-2026-09",
+      "request_id": "MDEyMzQ1Njc4OWFiY2RlZg",
+      "encapsulation": "utdi4JhEbLzFizDH6AT4KEe4uREYWZZYKvnye_1Oh18",
+      "ciphertext": "ALyjqvVOBEWiXem3QmC2bCWK-IXaa5Or-wqLVvdvTftx6B6Km5JfEgizs-ylw7MiMiSGZ4e2DIsy3vd3wybCHsYwAWKjkjRE4FBYo7FHnjFIpQCB9YAX5y_4_I5AsyM2ANRcm_1WAmknozT_mOM_XD1nHcwoq3uWq21nVhMRLmYelAHmo2ZzYzQ"
+    },
+    "info": "emVyb2RlbmV0LWNvbm5lY3QvdjEvcmVzcG9uc2UvcHJvdmlkZXItMjAyNi0wOQ",
+    "mode": "auth",
+    "plaintext": "eyJwcm90b2NvbF92ZXJzaW9uIjoxLCJvcGVyYXRpb24iOiJkZXZpY2VzLmxpc3QiLCJyZXF1ZXN0X2lkIjoiTURFeU16UTFOamM0T1dGaVkyUmxaZyIsInN0YXR1cyI6Im9rIiwidmVjdG9yIjoicmVzcG9uc2UifQ"
+  },
+  "schema_version": 1,
+  "suite": "HPKE-0x0020-0x0001-0x0003"
+}

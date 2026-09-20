@@ -38,8 +38,8 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
-          if [[ ! "$version" =~ ^0\.0\.1-dev\.[0-9]{12}$ ]]; then
-            echo "tag must match v0.0.1-dev.YYYYMMDDHHMM" >&2
+          if [[ ! "$version" =~ ^0\.0\.(1|2)-dev\.[0-9]{12}$ ]]; then
+            echo "tag must match v0.0.1-dev.YYYYMMDDHHMM or v0.0.2-dev.YYYYMMDDHHMM" >&2
             exit 1
           fi
           published_at=$(date -u -d "@$(git show -s --format=%ct HEAD)" +%Y-%m-%dT%H:%M:%SZ)
@@ -108,5 +108,5 @@ jobs:
               --verify-tag \
               --prerelease \
               --title "Connect $VERSION" \
-              --notes "Signed development foundation for the ZBoard and ZNet Sink package hosts. This release validates automated distribution and installation wiring; account authorization, subscription synchronization, and provider messages are not enabled yet."
+              --notes "Signed Connect development build for ZBoard and ZNet Sink. Includes device authorization, managed subscription synchronization, and read-only provider messages; intended for compatibility validation, not production use."
           fi
