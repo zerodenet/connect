@@ -252,6 +252,7 @@
         subscriptions: '读取订阅',
         messages: '同步消息',
         subscription: '更新托管订阅',
+        status: '读取本地状态',
       };
 
       function rememberFailure(stage, error) {
@@ -261,6 +262,10 @@
         let message = raw;
         if (raw.includes('subscription response must be base64 encoded')) {
           message = '更新托管订阅失败：客户端拒绝了订阅内容编码，请更新 Connect 插件后重试。';
+        } else if (raw.includes('FOREIGN KEY constraint failed')) {
+          message = '更新托管订阅失败：当前客户端无法建立订阅与配置的数据关联。Connect 未完成关联，请更新客户端后重试。';
+        } else if (raw.includes('插件页面请求超过客户端限制')) {
+          message = `${label}失败：当前管理页会话已失效，请返回“已安装插件”后重新进入 Connect。`;
         } else if (genericTransport && activeSource) {
           const route = activeSource.network_path === 'core' ? '通过代理内核' : '直接连接';
           const action = activeSource.network_path === 'core'
@@ -490,7 +495,14 @@
           return;
         }
         for (const source of sources) {
-          const progress = await sourceProgress(source);
+          let progress;
+          try {
+            progress = await sourceProgress(source);
+          } catch (error) {
+            const failure = rememberFailure('status', error);
+            progress = {state: 'blocked', detail: failure.message, action: '重新读取'};
+            notice(failure.message, 'error');
+          }
           const row = document.createElement('div');
           row.setAttribute('data-znet-status', progress.state);
           const mark = document.createElement('span');

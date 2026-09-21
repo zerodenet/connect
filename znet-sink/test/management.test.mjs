@@ -53,6 +53,10 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(html.includes('客户端没有确认来源配置已经持久化'));
   assert.ok(html.includes('content: utf8Base64(projected.content)'));
   assert.ok(html.includes('客户端拒绝了订阅内容编码'));
+  assert.ok(html.includes("raw.includes('FOREIGN KEY constraint failed')"));
+  assert.ok(html.includes('当前客户端无法建立订阅与配置的数据关联'));
+  assert.ok(html.includes('当前管理页会话已失效'));
+  assert.ok(html.includes("progress = {state: 'blocked', detail: failure.message, action: '重新读取'}"));
   assert.ok(html.includes('last_failure: lastFailure'));
   assert.ok(html.includes('客户端返回：${raw}'));
   assert.ok(html.includes('请点“修改连接方式”切换为“直接连接”后重试'));
