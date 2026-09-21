@@ -37,6 +37,10 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(html.includes("route: `messages.${activeSource.id}`"));
   assert.ok(html.includes("'subscription_remove'"));
   assert.ok(html.includes("statePut('sources/index'"));
+  assert.ok(html.includes("code === 'communication_disabled'"));
+  assert.ok(html.includes('来源已保存，但 ZBoard 尚未启用 Connect'));
+  assert.ok(html.includes("code === 'permission_denied'"));
+  assert.ok(html.includes('打开上方“权限”页'));
 });
 
 test('management page does not poll, bypass the host, or persist account secrets', () => {

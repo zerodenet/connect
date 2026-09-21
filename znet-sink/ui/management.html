@@ -238,6 +238,20 @@
         node.textContent = message || '';
       }
 
+      function connectFailure(error) {
+        const code = error?.connectCode || error?.code;
+        if (code === 'communication_disabled') {
+          return '来源已保存，但 ZBoard 尚未启用 Connect。请在 ZBoard 的“客户端通信”设置中启用后重试。';
+        }
+        if (code === 'permission_denied') {
+          return 'Connect 尚未获得客户端所需权限。请打开上方“权限”页，确认必需权限后启用。';
+        }
+        if (code === 'transport') {
+          return '来源已保存，但当前无法连接该服务。请检查网络、证书或连接方式后重试。';
+        }
+        return error?.message || '无法验证服务';
+      }
+
       function showView(id) {
         currentView = id;
         for (const view of views) byId(`view-${view}`).hidden = view !== id;
@@ -267,10 +281,11 @@
           title.textContent = '可以继续';
           result.append(title, document.createTextNode('服务身份已确认，下一步将授权当前设备。'));
         } else {
-          byId('serviceTitle').textContent = '此服务暂未开放 Connect';
+          const gap = value.capability_gap;
+          byId('serviceTitle').textContent = gap?.code === 'communication_disabled' ? 'ZBoard 尚未启用 Connect' : '此服务暂未开放 Connect';
           byId('serviceDescription').textContent = '来源已经保存，但当前还不能继续授权设备。';
-          title.textContent = '暂时无法连接';
-          result.append(title, document.createTextNode('该服务尚未提供 Connect 接入能力。你可以修改地址或稍后重试。'));
+          title.textContent = '来源已保存';
+          result.append(title, document.createTextNode(gap?.message || '该服务尚未提供 Connect 接入能力。你可以修改地址或稍后重试。'));
         }
       }
 
@@ -426,7 +441,9 @@
         try { body = JSON.parse(response.body); }
         catch { throw new Error(`服务返回了无法识别的响应（HTTP ${response.status}）。`); }
         if (response.status < 200 || response.status >= 300) {
-          const error = new Error(`服务拒绝了请求：${body.error || `HTTP ${response.status}`}`);
+          const error = new Error(body.error === 'communication_disabled'
+            ? '来源已保存，但 ZBoard 尚未启用 Connect。请在 ZBoard 的“客户端通信”设置中启用后重试。'
+            : `服务拒绝了请求：${body.error || `HTTP ${response.status}`}`);
           error.connectCode = body.error;
           throw error;
         }
@@ -749,9 +766,13 @@
         const configured = Boolean(activeSource?.name && activeSource?.origin && activeSource?.network_path);
         let providerReady = false;
         let providerError = null;
+        let providerErrorCode = null;
         if (configured) {
           try { await loadCapabilities(); providerReady = true; }
-          catch (error) { providerError = error.message || '无法验证服务'; }
+          catch (error) {
+            providerError = connectFailure(error);
+            providerErrorCode = error?.connectCode || error?.code || 'provider_unavailable';
+          }
         }
         const session = configured ? await sourceStateGet('session/metadata') : null;
         const binding = configured ? await sourceStateGet('subscription/binding') : null;
@@ -767,7 +788,11 @@
             {id:'subscription-binding', label:'订阅关联', state:binding?'ready':'waiting', detail:binding?binding.name:'授权后选择订阅。'},
             {id:'messages', label:'消息', state:session?'ready':'waiting', detail:session?'消息投影已可用。':'授权后可用。'},
           ],
-          capability_gap: providerError ? {code:'provider_unavailable', owner:'provider', message:providerError} : null,
+          capability_gap: providerError ? {
+            code:providerErrorCode,
+            owner:providerErrorCode === 'permission_denied' ? 'host' : 'provider',
+            message:providerError,
+          } : null,
         };
       }
 
