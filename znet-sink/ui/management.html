@@ -99,6 +99,10 @@
             <h2>授权此设备</h2>
             <p>使用服务账号完成一次设备授权。</p>
           </div>
+          <dl data-znet-summary>
+            <div><dt>来源</dt><dd id="accountSource">—</dd></div>
+            <div><dt>连接方式</dt><dd id="accountPath">—</dd></div>
+          </dl>
           <div data-znet-callout>
             <strong>密码不会保存</strong>
             密码只用于本次授权，不写入普通配置、状态或诊断结果。
@@ -108,7 +112,8 @@
             <label data-znet-field><span>密码</span><input id="password" type="password" autocomplete="current-password"></label>
           </div>
           <div data-znet-actions>
-            <button id="backService" type="button" data-variant="ghost">返回</button>
+            <button id="backService" type="button" data-variant="ghost">返回来源列表</button>
+            <button id="editAccountSource" type="button" data-variant="ghost">修改连接方式</button>
             <button id="login" type="button" data-variant="primary">授权并继续</button>
           </div>
         </div>
@@ -126,6 +131,7 @@
           </div>
           <div data-znet-actions>
             <button id="backAccount" type="button" data-variant="ghost">返回</button>
+            <button id="retrySubscriptions" type="button" data-variant="outline">重新读取</button>
             <button id="bindSubscription" type="button" data-variant="primary" disabled>确认关联</button>
           </div>
         </div>
@@ -207,6 +213,7 @@
       let messageItems = [];
       let sources = [];
       let activeSource = null;
+      let lastFailure = null;
 
       const networkPathOptions = () => [...document.querySelectorAll('[data-znet-select-option]')];
 
@@ -239,6 +246,50 @@
         node.textContent = message || '';
       }
 
+      const stageLabels = {
+        capabilities: '读取服务能力',
+        authorization: '授权设备',
+        subscriptions: '读取订阅',
+        messages: '同步消息',
+        subscription: '更新托管订阅',
+      };
+
+      function rememberFailure(stage, error) {
+        const label = stageLabels[stage] || stage || 'Connect 操作';
+        const raw = error?.message || String(error || '未知错误');
+        const genericTransport = raw.includes('网络请求失败或元数据格式无效');
+        let message = raw;
+        if (genericTransport && activeSource) {
+          const route = activeSource.network_path === 'core' ? '通过代理内核' : '直接连接';
+          const action = activeSource.network_path === 'core'
+            ? '请点“修改连接方式”切换为“直接连接”后重试。'
+            : '请检查服务地址、HTTPS 证书和当前网络后重试。';
+          message = `${label}失败：${route}访问 ${activeSource.origin} 未成功。${action}客户端返回：${raw}`;
+        } else if (!raw.startsWith(`${label}失败`)) {
+          message = `${label}失败：${raw}`;
+        }
+        lastFailure = {
+          stage,
+          label,
+          code: error?.connectCode || error?.code || (genericTransport ? 'host_transport_failure' : 'operation_failed'),
+          source: activeSource ? {
+            name: activeSource.name,
+            origin: activeSource.origin,
+            network_path: activeSource.network_path,
+          } : null,
+          host_message: raw,
+          occurred_at: new Date().toISOString(),
+        };
+        const wrapped = new Error(message);
+        wrapped.connectCode = error?.connectCode || error?.code || (genericTransport ? 'transport' : undefined);
+        wrapped.stage = stage;
+        return wrapped;
+      }
+
+      function operationFailure(stage, error) {
+        return error?.stage ? error : rememberFailure(stage, error);
+      }
+
       function connectFailure(error) {
         const code = error?.connectCode || error?.code;
         if (code === 'communication_disabled') {
@@ -248,7 +299,19 @@
           return 'Connect 尚未获得客户端所需权限。请打开上方“权限”页，确认必需权限后启用。';
         }
         if (code === 'transport') {
-          return '来源已保存，但当前无法连接该服务。请检查网络、证书或连接方式后重试。';
+          return error?.message || '来源已保存，但当前无法连接该服务。请检查网络、证书或连接方式后重试。';
+        }
+        if (code === 'invalid_credentials') {
+          return '账号或密码不正确，请核对后重试。';
+        }
+        if (['reauthorization_required', 'authorization_revoked', 'unauthorized'].includes(code)) {
+          return '当前设备授权已失效，请重新输入账号和密码授权。';
+        }
+        if (code === 'rate_limited') {
+          return '服务暂时限制了请求频率，请稍后再试。';
+        }
+        if (code === 'temporary_unavailable') {
+          return 'Connect 服务暂时不可用，请稍后再试。';
         }
         return error?.message || '无法验证服务';
       }
@@ -270,6 +333,8 @@
         const ready = checkState('provider-capability') === 'ready';
         byId('serviceSource').textContent = source ? `${source.name} · ${source.origin}` : '尚未配置';
         byId('servicePath').textContent = source?.network_path === 'core' ? '通过代理内核' : '直接连接';
+        byId('accountSource').textContent = source ? `${source.name} · ${source.origin}` : '尚未配置';
+        byId('accountPath').textContent = source?.network_path === 'core' ? '通过代理内核' : '直接连接';
         byId('completeName').textContent = source?.name || '—';
         byId('completeOrigin').textContent = source?.origin || '—';
         byId('continueAccount').hidden = !ready;
@@ -375,8 +440,16 @@
 
       async function saveSources(nextSources, selected = activeSource) {
         const origins = validateSources(nextSources);
-        const current = await znetPlugin.configuration.get(component);
         await znetPlugin.configuration.save(component, {provider_origins: JSON.stringify(origins)});
+        const persisted = await znetPlugin.configuration.get(component);
+        let persistedOrigins = null;
+        try { persistedOrigins = JSON.parse(persisted.provider_origins || 'null'); }
+        catch { /* handled by the explicit persistence error below */ }
+        if (!Array.isArray(persistedOrigins) || JSON.stringify(persistedOrigins) !== JSON.stringify(origins)) {
+          const error = new Error('客户端没有确认来源配置已经持久化，请重新保存；若持续出现，请查看技术诊断。');
+          error.code = 'configuration_not_persisted';
+          throw error;
+        }
         sources = nextSources;
         await statePut('sources/index', sources);
       }
@@ -392,7 +465,17 @@
         setNetworkPath(source.network_path || 'direct');
       }
 
-      function renderSourceList() {
+      async function sourceProgress(source) {
+        const [session, binding] = await Promise.all([
+          stateGet(`source/${source.id}/session/metadata`),
+          stateGet(`source/${source.id}/subscription/binding`),
+        ]);
+        if (binding) return {state: 'ready', detail: `已连接 · ${binding.name || '托管订阅'}`, action: '查看连接'};
+        if (session) return {state: 'action_required', detail: '设备已授权 · 待选择订阅', action: '选择订阅'};
+        return {state: 'action_required', detail: '待授权设备', action: '授权账号'};
+      }
+
+      async function renderSourceList() {
         const list = byId('sourceList');
         list.replaceChildren();
         if (!sources.length) {
@@ -405,26 +488,36 @@
           return;
         }
         for (const source of sources) {
+          const progress = await sourceProgress(source);
           const row = document.createElement('div');
-          row.setAttribute('data-znet-status', 'ready');
+          row.setAttribute('data-znet-status', progress.state);
           const mark = document.createElement('span');
           mark.setAttribute('data-znet-status-mark', '');
           const content = document.createElement('div');
           const title = document.createElement('strong');
           title.textContent = source.name;
           const meta = document.createElement('small');
-          meta.textContent = `${source.origin} · ${source.network_path === 'core' ? '通过内核' : '直连'}`;
+          meta.textContent = `${progress.detail} · ${source.origin} · ${source.network_path === 'core' ? '通过内核' : '直连'}`;
           const actions = document.createElement('div');
           actions.setAttribute('data-znet-actions', '');
-          const open = document.createElement('button');
-          open.type = 'button';
-          open.setAttribute('data-variant', 'outline');
-          open.textContent = '管理来源';
-          open.addEventListener('click', () => runRequest(null, async () => {
+          const advance = document.createElement('button');
+          advance.type = 'button';
+          advance.setAttribute('data-variant', 'primary');
+          advance.textContent = progress.action;
+          advance.addEventListener('click', () => runRequest(null, async () => {
             await selectSource(source);
             await openActiveSource();
           }));
-          actions.append(open);
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.setAttribute('data-variant', 'ghost');
+          edit.textContent = '来源设置';
+          edit.addEventListener('click', () => runRequest(null, async () => {
+            await selectSource(source);
+            notice('');
+            showView('source');
+          }));
+          actions.append(edit, advance);
           content.append(title, meta, actions);
           row.append(mark, content);
           list.append(row);
@@ -434,21 +527,28 @@
       async function configuredRequest(path, options = {}) {
         if (!activeSource) throw new Error('请先选择来源。');
         const origin = activeSource.origin;
-        const response = await sdk('network.configured.request', 'provider_origins', 'configured_request', {
-          url: new URL(path, `${origin}/`).href,
-          method: options.method || 'GET',
-          headers: options.headers || {},
-          ...(options.body == null ? {} : {body: options.body}),
-          route: activeSource.network_path || 'direct',
-        });
+        let response;
+        try {
+          response = await sdk('network.configured.request', 'provider_origins', 'configured_request', {
+            url: new URL(path, `${origin}/`).href,
+            method: options.method || 'GET',
+            headers: options.headers || {},
+            ...(options.body == null ? {} : {body: options.body}),
+            route: activeSource.network_path || 'direct',
+          });
+        } catch (error) {
+          throw operationFailure(options.stage || 'capabilities', error);
+        }
         let body;
         try { body = JSON.parse(response.body); }
         catch { throw new Error(`服务返回了无法识别的响应（HTTP ${response.status}）。`); }
         if (response.status < 200 || response.status >= 300) {
-          const error = new Error(body.error === 'communication_disabled'
+          const serviceCode = typeof body.error === 'string' ? body.error : body.error?.code;
+          const serviceMessage = typeof body.error === 'object' ? body.error?.message : null;
+          const error = new Error(serviceCode === 'communication_disabled'
             ? '来源已保存，但 ZBoard 尚未启用 Connect。请在 ZBoard 的“客户端通信”设置中启用后重试。'
-            : `服务拒绝了请求：${body.error || `HTTP ${response.status}`}`);
-          error.connectCode = body.error;
+            : serviceMessage || `服务拒绝了请求：${serviceCode || `HTTP ${response.status}`}`);
+          error.connectCode = serviceCode || (response.status === 401 ? 'unauthorized' : `http_${response.status}`);
           throw error;
         }
         return body;
@@ -509,9 +609,13 @@
       }
 
       async function loadCapabilities() {
-        providerCapabilities = await verifyCapabilities(
-          await configuredRequest('/.well-known/zerodenet-connect/v1/capabilities')
-        );
+        try {
+          providerCapabilities = await verifyCapabilities(
+            await configuredRequest('/.well-known/zerodenet-connect/v1/capabilities', {stage: 'capabilities'})
+          );
+        } catch (error) {
+          throw operationFailure('capabilities', error);
+        }
         return providerCapabilities;
       }
 
@@ -565,6 +669,10 @@
         };
         const responseEnvelope = await configuredRequest(capabilities.exchange_path, {
           method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(envelope),
+          stage: operation === 'authorization.password' ? 'authorization'
+            : operation.startsWith('subscriptions.') ? 'subscriptions'
+            : operation.startsWith('messages.') ? 'messages'
+            : 'authorization',
         });
         if (responseEnvelope.protocol_version !== 1 || responseEnvelope.suite !== envelope.suite ||
             responseEnvelope.key_id !== keyId || responseEnvelope.request_id !== requestId) {
@@ -588,8 +696,9 @@
           throw new Error('服务响应消息无效或已经过期。');
         }
         if (response.status === 'error') {
-          const error = new Error(`Connect 请求失败：${response.error?.code || 'unknown'}`);
-          error.connectCode = response.error?.code;
+          const code = response.error?.code || 'unknown';
+          const error = new Error(connectFailure({connectCode: code, message: `Connect 请求失败：${code}`}));
+          error.connectCode = code;
           throw error;
         }
         if (response.status !== 'ok' || response.body == null) throw new Error('服务响应消息缺少结果。');
@@ -658,11 +767,26 @@
         byId('bindSubscription').disabled = !selectedSubscriptionId;
       }
 
+      function renderSubscriptionFailure(message) {
+        availableSubscriptions = [];
+        selectedSubscriptionId = null;
+        byId('bindSubscription').disabled = true;
+        const list = byId('subscriptionList');
+        list.replaceChildren();
+        const strong = document.createElement('strong');
+        strong.textContent = '订阅读取失败';
+        list.append(strong, document.createTextNode(message));
+      }
+
       async function listSubscriptions() {
-        const authorization = await accessAuthorization();
-        const result = await exchange('subscriptions.list', authorization, {});
-        renderSubscriptions(result.subscriptions || []);
-        return result.subscriptions || [];
+        try {
+          const authorization = await accessAuthorization();
+          const result = await exchange('subscriptions.list', authorization, {});
+          renderSubscriptions(result.subscriptions || []);
+          return result.subscriptions || [];
+        } catch (error) {
+          throw operationFailure('subscriptions', error);
+        }
       }
 
       async function pullSubscription(subscriptionId, subscriptionName, knownRevision = null) {
@@ -797,6 +921,7 @@
             owner:providerErrorCode === 'permission_denied' ? 'host' : 'provider',
             message:providerError,
           } : null,
+          last_failure: lastFailure,
         };
       }
 
@@ -808,8 +933,7 @@
             account: payload.account, device_name: `ZNet Sink · ${navigator.platform || '本机'}`,
           });
           await saveSession(result);
-          await listSubscriptions();
-          return {ok:true, message:'设备授权成功，请选择订阅。'};
+          return {ok:true, message:'设备授权成功，正在读取可用订阅。'};
         }
         throw new Error('当前 Connect 版本不支持此操作。');
       }
@@ -850,8 +974,15 @@
           return value;
         }
         if (value?.phase === 'needs-subscription') {
-          try { await listSubscriptions(); showView('subscriptions'); }
-          catch (error) { notice(error.message || '无法读取订阅', 'error'); showView('account'); }
+          try { await listSubscriptions(); notice(''); showView('subscriptions'); }
+          catch (error) {
+            const failure = operationFailure('subscriptions', error);
+            renderSubscriptionFailure(failure.message);
+            notice(failure.message, 'error');
+            showView('subscriptions');
+          }
+        } else if (value?.phase === 'needs-authorization') {
+          showView('account');
         } else if (value?.source) {
           showView('service');
         } else {
@@ -914,11 +1045,12 @@
             : [...sources, source];
           activeSource = source;
           await saveSources(next, source);
-          renderSourceList();
+          await renderSourceList();
           latest = latest || {checks: []};
           latest.source = source;
           showView('service');
-          await refreshStatus();
+          const value = await refreshStatus();
+          if (value?.phase === 'needs-authorization') showView('account');
         } catch (error) {
           notice(error.message || '无法保存来源', 'error');
         }
@@ -927,12 +1059,24 @@
       byId('editSource').addEventListener('click', () => { notice(''); showView('source'); });
       byId('refresh').addEventListener('click', () => runRequest('refresh', async () => { notice(''); await refreshStatus(); }));
       byId('continueAccount').addEventListener('click', () => showView('account'));
-      byId('backServiceSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
-      byId('backService').addEventListener('click', () => showView('service'));
+      byId('backServiceSources').addEventListener('click', () => runRequest(null, async () => { await renderSourceList(); showView('sources'); }));
+      byId('backService').addEventListener('click', () => runRequest(null, async () => { await renderSourceList(); showView('sources'); }));
+      byId('editAccountSource').addEventListener('click', () => { notice(''); showView('source'); });
       byId('backAccount').addEventListener('click', () => showView('account'));
+      byId('retrySubscriptions').addEventListener('click', () => runRequest('retrySubscriptions', async () => {
+        notice('');
+        try {
+          await listSubscriptions();
+          notice('已重新读取可用订阅。', 'success');
+        } catch (error) {
+          const failure = operationFailure('subscriptions', error);
+          renderSubscriptionFailure(failure.message);
+          notice(failure.message, 'error');
+        }
+      }));
       byId('manageSource').addEventListener('click', () => showView('source'));
-      byId('backSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
-      byId('backCompleteSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
+      byId('backSources').addEventListener('click', () => runRequest(null, async () => { await renderSourceList(); showView('sources'); }));
+      byId('backCompleteSources').addEventListener('click', () => runRequest(null, async () => { await renderSourceList(); showView('sources'); }));
       byId('addSource').addEventListener('click', () => {
         activeSource = null;
         providerCapabilities = null;
@@ -963,7 +1107,7 @@
           const removedId = activeSource.id;
           activeSource = null;
           await saveSources(sources.filter(source => source.id !== removedId), null);
-          renderSourceList();
+          await renderSourceList();
           notice('来源、设备授权和托管订阅已移除。', 'success');
           showView('sources');
         } catch (error) {
@@ -1012,13 +1156,25 @@
 
       byId('login').addEventListener('click', () => runRequest('login', async () => {
         notice('');
+        const account = byId('account').value.trim();
         const password = byId('password').value;
         try {
-          const result = await invoke('authorization.password', {account: byId('account').value.trim(), password});
-          notice(result.message, result.ok ? 'success' : 'error');
-          if (result.ok) showView('subscriptions');
+          if (!account || !password) throw new Error('请输入账号和密码。');
+          const result = await invoke('authorization.password', {account, password});
+          if (result.ok) {
+            showView('subscriptions');
+            try {
+              await listSubscriptions();
+              notice('设备授权成功，请选择订阅。', 'success');
+            } catch (error) {
+              const failure = operationFailure('subscriptions', error);
+              renderSubscriptionFailure(failure.message);
+              notice(`设备授权成功，但${failure.message}`, 'error');
+            }
+          }
         } catch (error) {
-          notice(error.message || '设备授权失败', 'error');
+          const failure = operationFailure('authorization', error);
+          notice(failure.message, 'error');
         } finally {
           byId('password').value = '';
         }
@@ -1092,7 +1248,7 @@
         } catch (error) {
           notice(`${error.message || '无法读取已有设置'}；可以直接重新填写并保存。`, 'error');
         }
-        renderSourceList();
+        await renderSourceList();
         showView('sources');
         if (initialNavigation?.route?.startsWith('messages.') && initialNavigation.reference) {
           const sourceId = initialNavigation.route.slice('messages.'.length);

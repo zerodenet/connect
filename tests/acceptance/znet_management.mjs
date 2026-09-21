@@ -180,9 +180,9 @@ try {
   await page.locator('#networkPath').click();
   await page.locator('[data-znet-select-option][data-value="direct"]').click();
   await page.locator('#save').click();
-  await page.locator('#continueAccount').waitFor({state: 'visible'});
-  assert.equal(await page.locator('#serviceTitle').textContent(), '服务已确认');
-  await page.locator('#continueAccount').click();
+  await page.locator('#view-account').waitFor({state: 'visible'});
+  assert.match(await page.locator('#accountSource').textContent(), /Acceptance ZBoard/u);
+  assert.equal(await page.locator('#accountPath').textContent(), '直接连接');
   await page.locator('#account').fill('user@example.com');
   await page.locator('#password').fill('correct horse');
   await page.locator('#login').click();
@@ -208,6 +208,35 @@ try {
   assert.ok(snapshot.calls.some(call => call.method === 'subscription_apply'));
   assert.ok(snapshot.calls.some(call => call.method === 'schedule_put'));
   assert.ok(snapshot.calls.some(call => call.method === 'notification_post'));
+
+  await page.locator('#backCompleteSources').click();
+  await page.locator('#view-sources').waitFor({state: 'visible'});
+  assert.match(await page.locator('#sourceList').textContent(), /已连接/u);
+  assert.match(await page.locator('#sourceList').textContent(), /查看连接/u);
+
+  const failingPage = await context.newPage();
+  await failingPage.goto(pathToFileURL(managementPage).href);
+  await failingPage.locator('#addSource').click();
+  await failingPage.locator('#sourceName').fill('Core route ZBoard');
+  await failingPage.locator('#providerOrigin').fill(origin);
+  await failingPage.locator('#networkPath').click();
+  await failingPage.locator('[data-znet-select-option][data-value="core"]').click();
+  await failingPage.evaluate(() => {
+    const original = globalThis.znetPlugin.capabilities.call;
+    globalThis.znetPlugin.capabilities.call = (...args) => {
+      if (args[3] === 'configured_request' && args[4]?.route === 'core') {
+        throw new Error('插件操作失败：网络请求失败或元数据格式无效');
+      }
+      return original(...args);
+    };
+  });
+  await failingPage.locator('#save').click();
+  await failingPage.locator('#view-service').waitFor({state: 'visible'});
+  const failureResult = await failingPage.locator('#serviceResult').textContent();
+  assert.match(failureResult, /读取服务能力失败/u);
+  assert.match(failureResult, /通过代理内核/u);
+  assert.match(failureResult, /切换为“直接连接”/u);
+  assert.match(failureResult, /客户端返回：插件操作失败：网络请求失败或元数据格式无效/u);
   console.log('ZNet Sink installed management-page flow passed.');
 } finally {
   await browser.close();

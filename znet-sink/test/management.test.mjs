@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 const html = await readFile(new URL('../ui/management.html', import.meta.url), 'utf8');
 
 test('management page follows the host settings standard and exposes a progressive workflow', () => {
-  for (const marker of ['添加来源', '保存并检查', '确认服务', '授权此设备', '选择订阅', '立即同步', '服务消息', '移除来源', '技术诊断']) {
+  for (const marker of ['添加来源', '保存并检查', '确认服务', '授权此设备', '选择订阅', '重新读取', '立即同步', '服务消息', '移除来源', '技术诊断']) {
     assert.ok(html.includes(marker), `missing ${marker}`);
   }
   for (const marker of ['data-znet-layout="settings"', 'data-znet-panel', 'view-source', 'view-service', 'view-account']) {
@@ -42,9 +42,19 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(html.includes("code === 'permission_denied'"));
   assert.ok(html.includes('打开上方“权限”页'));
   assert.ok(html.includes('id="backServiceSources"'));
+  assert.ok(html.includes('id="editAccountSource"'));
   assert.ok(html.includes("actions.setAttribute('data-znet-actions', '')"));
-  assert.ok(html.includes("open.setAttribute('data-variant', 'outline')"));
-  assert.ok(html.includes("open.textContent = '管理来源'"));
+  assert.ok(html.includes("advance.setAttribute('data-variant', 'primary')"));
+  assert.ok(html.includes("action: '授权账号'"));
+  assert.ok(html.includes("action: '选择订阅'"));
+  assert.ok(html.includes("edit.textContent = '来源设置'"));
+  assert.ok(html.includes("value?.phase === 'needs-authorization'"));
+  assert.ok(html.includes("error.code = 'configuration_not_persisted'"));
+  assert.ok(html.includes('客户端没有确认来源配置已经持久化'));
+  assert.ok(html.includes('last_failure: lastFailure'));
+  assert.ok(html.includes('客户端返回：${raw}'));
+  assert.ok(html.includes('请点“修改连接方式”切换为“直接连接”后重试'));
+  assert.ok(html.includes('设备授权成功，但${failure.message}'));
 });
 
 test('management page does not poll, bypass the host, or persist account secrets', () => {
