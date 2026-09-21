@@ -62,10 +62,10 @@ publisher_public_key=$(tr -d '\r\n' < "$probe_root/publisher.key.pub")
       -overlay="$probe_root/overlay.json" \
       -tags=zboard_connect_clean_baseline_probe \
       ./internal/plugins \
-      -run '^TestConnectPackageIsRejectedByCleanHostCapabilityBoundary$' \
+      -run '^TestConnectPackageIsAdmittedByCleanHostCapabilityBoundary$' \
       -count=1 \
       -v
 )
 
-printf 'Confirmed: clean ZBoard %s rejects Connect at its public capability boundary.\n' \
+printf 'Confirmed: clean ZBoard %s admits Connect at its public capability boundary.\n' \
   "$(git -C "$zboard_root" rev-parse HEAD)"

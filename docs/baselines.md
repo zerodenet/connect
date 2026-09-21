@@ -17,14 +17,14 @@ The source plan used ZBoard and ZNet Sink as the first delivery example. This re
 generalizes that example into provider and consumer protocol roles; the two named products remain
 reference adapters and acceptance environments, not protocol identity.
 
-## Clean-host release gate (2026-09-20)
+## Clean-host release gate (2026-09-21)
 
 The current acceptance baseline is deliberately stricter than the historical planning evidence:
 
 | Host | Clean committed baseline | Result with the current Connect package |
 | --- | --- | --- |
-| ZNet Sink | `8e1972cbfe15579dee631caa607f0a2c4d1fff25` | signed package import and managed-provider flow passed |
-| ZBoard | `0bb6a355fc89fb643419cea8944c7eb1ae463431` (`v0.0.2-rc.202609201158`) | signed package import, dynamic route lifecycle and provider runtime passed; release assets published |
+| ZNet Sink | `c0dd6a506f48bc280a04668bf4c7fe12b85c3e34` (`v0.0.2-dev.202609210148`) | signed package import and managed-provider flow passed |
+| ZBoard | `7da9cfb861b6699c08e649b718f1bfd363b0fb00` (`v0.0.2-rc.202609210457`) | signed package import, dynamic route lifecycle and provider runtime passed; release assets published |
 
 Neither baseline may be replaced by a dirty host worktree when recording release readiness. The
 same packages also passed the cross-host authorization, subscription and message flow. The detailed

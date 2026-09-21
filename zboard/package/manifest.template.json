@@ -7,7 +7,9 @@
   "requires": {
     "zboard": ">=0.0.2 <0.1.0",
     "recommended_zboard_version": "0.0.2",
-    "tested_zboard_versions": [],
+    "tested_zboard_versions": [
+      "v0.0.2-rc.202609210457"
+    ],
     "plugin_protocol": 1,
     "ui_bridge": 1
   },

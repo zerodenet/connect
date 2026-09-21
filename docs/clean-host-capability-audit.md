@@ -8,8 +8,8 @@ The accepted baselines are committed host versions checked out without source mo
 
 | Host | Frozen commit | Published identity |
 | --- | --- | --- |
-| ZNet Sink | `8e1972cbfe15579dee631caa607f0a2c4d1fff25` | sealed development baseline |
-| ZBoard | `0bb6a355fc89fb643419cea8944c7eb1ae463431` | `v0.0.2-rc.202609201158` |
+| ZNet Sink | `c0dd6a506f48bc280a04668bf4c7fe12b85c3e34` | `v0.0.2-dev.202609210148` |
+| ZBoard | `7da9cfb861b6699c08e649b718f1bfd363b0fb00` | `v0.0.2-rc.202609210457` |
 
 ## ZNet Sink
 
