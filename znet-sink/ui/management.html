@@ -84,6 +84,7 @@
             正在确认该服务是否支持 Connect。
           </div>
           <div data-znet-actions>
+            <button id="backServiceSources" type="button" data-variant="ghost">返回来源列表</button>
             <button id="editSource" type="button" data-variant="ghost">修改来源</button>
             <button type="button" data-variant="ghost" data-open-diagnostics>诊断</button>
             <button id="refresh" type="button" data-variant="outline">重新检测</button>
@@ -413,15 +414,18 @@
           title.textContent = source.name;
           const meta = document.createElement('small');
           meta.textContent = `${source.origin} · ${source.network_path === 'core' ? '通过内核' : '直连'}`;
+          const actions = document.createElement('div');
+          actions.setAttribute('data-znet-actions', '');
           const open = document.createElement('button');
           open.type = 'button';
-          open.setAttribute('data-variant', 'ghost');
-          open.textContent = '管理';
+          open.setAttribute('data-variant', 'outline');
+          open.textContent = '管理来源';
           open.addEventListener('click', () => runRequest(null, async () => {
             await selectSource(source);
             await openActiveSource();
           }));
-          content.append(title, meta, open);
+          actions.append(open);
+          content.append(title, meta, actions);
           row.append(mark, content);
           list.append(row);
         }
@@ -923,6 +927,7 @@
       byId('editSource').addEventListener('click', () => { notice(''); showView('source'); });
       byId('refresh').addEventListener('click', () => runRequest('refresh', async () => { notice(''); await refreshStatus(); }));
       byId('continueAccount').addEventListener('click', () => showView('account'));
+      byId('backServiceSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
       byId('backService').addEventListener('click', () => showView('service'));
       byId('backAccount').addEventListener('click', () => showView('account'));
       byId('manageSource').addEventListener('click', () => showView('source'));

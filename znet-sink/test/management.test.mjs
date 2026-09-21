@@ -41,6 +41,10 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(html.includes('来源已保存，但 ZBoard 尚未启用 Connect'));
   assert.ok(html.includes("code === 'permission_denied'"));
   assert.ok(html.includes('打开上方“权限”页'));
+  assert.ok(html.includes('id="backServiceSources"'));
+  assert.ok(html.includes("actions.setAttribute('data-znet-actions', '')"));
+  assert.ok(html.includes("open.setAttribute('data-variant', 'outline')"));
+  assert.ok(html.includes("open.textContent = '管理来源'"));
 });
 
 test('management page does not poll, bypass the host, or persist account secrets', () => {
