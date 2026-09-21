@@ -40,7 +40,7 @@
         </label>
       </div>
       <footer class="form-actions">
-        <button id="save" class="primary" type="submit">保存设置</button>
+        <button id="save" class="primary" type="button">保存设置</button>
         <button id="test" type="button" disabled>验证已保存配置</button>
         <span id="progress" aria-live="polite"></span>
       </footer>
@@ -191,8 +191,7 @@
       $('provider-id').addEventListener('input', () => { renderEndpoint(); markDirty(); });
       $('display-name').addEventListener('input', markDirty);
       $('enabled').addEventListener('change', markDirty);
-      $('settings').addEventListener('submit', async event => {
-        event.preventDefault();
+      async function saveSettings() {
         setBusy(true, '正在保存…');
         try {
           const config = configFromForm();
@@ -215,7 +214,13 @@
           updateActions(false);
           $('progress').textContent = '';
         }
-      });
+      }
+
+      // ZBoard intentionally sandboxes plugin frames without allow-forms. Saving
+      // must stay inside the governed postMessage bridge instead of relying on a
+      // native form submission, even when that submission would be prevented.
+      $('save').addEventListener('click', saveSettings);
+      $('settings').addEventListener('submit', event => event.preventDefault());
 
       $('test').addEventListener('click', async () => {
         setBusy(true, '正在验证…');

@@ -6,6 +6,7 @@ import vm from 'node:vm';
 const html = fs.readFileSync(new URL('../../zboard/ui/admin/index.html', import.meta.url), 'utf8');
 const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
 assert.ok(script, 'admin page script is present');
+assert.match(html, /<button id="save" class="primary" type="button">/, 'sandboxed page must not rely on native form submission');
 
 class Element {
   constructor() {
@@ -105,7 +106,7 @@ test('ZBoard admin page defaults to the current site and confirms persisted enab
   page.elements.enabled.checked = true;
   page.elements.enabled.dispatch('change');
   assert.equal(page.elements.status.textContent, '有未保存更改');
-  await page.elements.settings.dispatch('submit');
+  await page.elements.save.dispatch('click');
   await settle();
 
   assert.deepEqual(page.getView().config, {
