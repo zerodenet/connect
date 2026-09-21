@@ -31,7 +31,7 @@
         <label class="field">
           <span>服务来源</span>
           <input id="provider-id" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://panel.example.com" required>
-          <small>必须是当前 ZBoard 对外可访问的 HTTPS 来源，不包含路径、查询参数或结尾斜杠。</small>
+          <small>首次配置会自动使用当前 ZBoard 页面的 HTTPS 来源；也可以改为实际对外地址。不能包含路径、查询参数或结尾斜杠。</small>
         </label>
         <label class="field">
           <span>来源名称</span>
@@ -41,7 +41,7 @@
       </div>
       <footer class="form-actions">
         <button id="save" class="primary" type="submit">保存设置</button>
-        <button id="test" type="button">验证已保存配置</button>
+        <button id="test" type="button" disabled>验证已保存配置</button>
         <span id="progress" aria-live="polite"></span>
       </footer>
     </form>
@@ -52,6 +52,7 @@
         <div><dt>能力发现</dt><dd id="capabilities-url">保存来源后显示</dd></div>
         <div><dt>加密交换</dt><dd id="exchange-url">保存来源后显示</dd></div>
         <div><dt>服务能力</dt><dd>设备授权 · ZNet Sink 订阅 · 公告消息</dd></div>
+        <div><dt>下一步</dt><dd id="next-step">先保存并启用 Connect</dd></div>
       </dl>
     </section>
 
@@ -62,6 +63,9 @@
       const token = new URLSearchParams(location.hash.slice(1)).get('bridge_token');
       let next = 1;
       let revision = 0;
+      let configured = false;
+      let busy = false;
+      let dirty = false;
       const pending = new Map();
       const $ = id => document.getElementById(id);
 
@@ -82,10 +86,16 @@
         });
       }
 
-      function setBusy(busy, text = '') {
-        $('save').disabled = busy;
-        $('test').disabled = busy;
+      function setBusy(nextBusy, text = '') {
+        updateActions(nextBusy);
+        window.requestAnimationFrame(resize);
         $('progress').textContent = text;
+      }
+
+      function updateActions(nextBusy = busy) {
+        busy = nextBusy;
+        $('save').disabled = busy;
+        $('test').disabled = busy || !configured || dirty;
       }
 
       function showNotice(title, detail, error = false) {
@@ -102,56 +112,133 @@
         $('exchange-url').textContent = origin ? `${origin}/.well-known/zerodenet-connect/v1/exchange` : '保存来源后显示';
       }
 
+      function normalizedOrigin(value) {
+        let url;
+        try {
+          url = new URL(value);
+        } catch {
+          throw new Error('服务来源必须是完整的 HTTPS 地址。');
+        }
+        if (url.protocol !== 'https:') throw new Error('服务来源必须使用 HTTPS。');
+        if (url.username || url.password || (url.pathname && url.pathname !== '/') || url.search || url.hash) {
+          throw new Error('服务来源只能填写站点来源，不能包含账号、路径、查询参数或锚点。');
+        }
+        return url.origin;
+      }
+
+      function currentSiteOrigin(context) {
+        const candidates = [context && context.site_url, location.href];
+        for (const candidate of candidates) {
+          if (typeof candidate !== 'string' || !candidate) continue;
+          try {
+            const origin = new URL(candidate).origin;
+            if (origin.startsWith('https://')) return origin;
+          } catch {}
+        }
+        return '';
+      }
+
+      function configFromForm() {
+        return {
+          enabled: $('enabled').checked,
+          provider_id: normalizedOrigin($('provider-id').value.trim()),
+          display_name: $('display-name').value.trim() || 'ZBoard'
+        };
+      }
+
+      function sameConfig(left, right) {
+        return left.enabled === right.enabled &&
+          left.provider_id === right.provider_id &&
+          left.display_name === right.display_name;
+      }
+
+      function applyView(view, context = {}) {
+        revision = view.revision || 0;
+        configured = view.configured === true;
+        const config = view.config || {};
+        $('enabled').checked = configured && config.enabled === true;
+        $('provider-id').value = configured && typeof config.provider_id === 'string'
+          ? config.provider_id
+          : currentSiteOrigin(context);
+        $('display-name').value = configured && typeof config.display_name === 'string'
+          ? config.display_name
+          : 'ZBoard';
+        dirty = false;
+        $('status').textContent = !configured ? '未配置' : config.enabled ? '已启用' : '已停用';
+        $('status').className = `status-pill ${configured && config.enabled ? 'success' : ''}`;
+        $('next-step').textContent = configured && config.enabled
+          ? `在 ZNet Sink 的 Connect 管理页添加来源：${config.provider_id}`
+          : configured
+            ? '当前配置已保存；启用 Connect 后客户端才可连接'
+            : '确认来源地址，启用 Connect 并保存';
+        renderEndpoint();
+        updateActions(false);
+      }
+
+      function markDirty() {
+        if (busy) return;
+        dirty = true;
+        $('status').textContent = '有未保存更改';
+        $('status').className = 'status-pill warning';
+        $('next-step').textContent = '保存当前更改后再到客户端添加来源';
+        updateActions(false);
+      }
+
       function resize() {
         parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, type:'ui.resize', height:document.documentElement.scrollHeight}, '*');
       }
 
-      $('provider-id').addEventListener('input', renderEndpoint);
+      $('provider-id').addEventListener('input', () => { renderEndpoint(); markDirty(); });
+      $('display-name').addEventListener('input', markDirty);
+      $('enabled').addEventListener('change', markDirty);
       $('settings').addEventListener('submit', async event => {
         event.preventDefault();
         setBusy(true, '正在保存…');
-        const config = {
-          enabled: $('enabled').checked,
-          provider_id: $('provider-id').value.trim().replace(/\/$/, ''),
-          display_name: $('display-name').value.trim() || 'ZBoard'
-        };
         try {
-          const result = await call('config.save', {revision, config});
-          revision = result.revision;
-          $('status').textContent = config.enabled ? '已启用' : '已停用';
-          $('status').className = `status-pill ${config.enabled ? 'success' : ''}`;
-          showNotice('设置已保存', config.enabled ? '客户端现在可以通过能力发现入口建立受保护连接。' : 'Connect 已停用，公开入口会返回通信未启用。');
+          const config = configFromForm();
+          const saved = await call('config.save', {revision, config});
+          const view = await call('config.load');
+          const persisted = view.config || {};
+          if (!view.configured || view.revision !== saved.revision || !sameConfig(config, persisted)) {
+            throw new Error('宿主没有返回刚刚保存的配置；为避免显示错误状态，本页未将操作标记为成功。');
+          }
+          applyView(view);
+          showNotice(
+            config.enabled ? '设置已保存并启用' : '设置已保存但仍停用',
+            config.enabled
+              ? `下一步：在 ZNet Sink 的 Connect 管理页添加来源 ${config.provider_id}，然后授权设备。`
+              : '如需客户端连接，请勾选“启用 Connect”后再次保存。'
+          );
         } catch (error) {
-          showNotice('保存失败', '设置可能已被其他管理员更新，请重新打开页面后再试。', true);
+          showNotice('保存失败', error instanceof Error ? error.message : '宿主未能保存设置，请重新加载后再试。', true);
         } finally {
-          setBusy(false);
+          updateActions(false);
+          $('progress').textContent = '';
         }
       });
 
       $('test').addEventListener('click', async () => {
         setBusy(true, '正在验证…');
         try {
+          const view = await call('config.load');
+          if (!view.configured) throw new Error('尚未保存配置。');
+          if (view.config?.enabled !== true) throw new Error('配置已经保存，但 Connect 仍处于停用状态。');
           await call('config.test');
-          showNotice('配置有效', '插件运行时已接受当前保存的配置。');
+          applyView(view);
+          showNotice('已保存的配置有效', `下一步：在 ZNet Sink 的 Connect 管理页添加来源 ${view.config.provider_id}，然后授权设备。`);
         } catch (error) {
-          showNotice('验证失败', '请检查 HTTPS 来源地址并先保存设置。', true);
+          showNotice('验证失败', error instanceof Error ? error.message : '请检查 HTTPS 来源地址并先保存设置。', true);
         } finally {
-          setBusy(false);
+          updateActions(false);
+          $('progress').textContent = '';
         }
       });
 
-      Promise.all([call('context.load'), call('config.load')]).then(([, view]) => {
-        revision = view.revision || 0;
-        const config = view.config || {};
-        $('enabled').checked = config.enabled === true;
-        $('provider-id').value = typeof config.provider_id === 'string' ? config.provider_id : '';
-        $('display-name').value = typeof config.display_name === 'string' ? config.display_name : 'ZBoard';
-        $('status').textContent = !view.configured ? '未配置' : config.enabled ? '已启用' : '已停用';
-        $('status').className = `status-pill ${config.enabled ? 'success' : ''}`;
-        renderEndpoint();
+      Promise.all([call('context.load'), call('config.load')]).then(([context, view]) => {
+        applyView(view, context);
         parent.postMessage({source:'zboard-plugin-ui', bridge_token:token, request_id:`ready-${next++}`, type:'plugin.ready'}, '*');
         resize();
-      }).catch(() => showNotice('无法读取配置', '扩展会话可能已经失效，请重新加载页面。', true));
+      }).catch(error => showNotice('无法读取配置', error instanceof Error ? error.message : '扩展会话可能已经失效，请重新加载页面。', true));
     })();
   </script>
 </body>

@@ -189,8 +189,20 @@ func TestConnectInstalledHostEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read initial Connect configuration revision: %v", err)
 	}
-	if _, err := manager.SaveConfig(context.Background(), installation.ID, "admin", config.Revision, []byte(`{"enabled":true,"provider_id":"https://panel.example","display_name":"Example"}`)); err != nil {
+	adminSession, err := manager.CreateSession(connectPluginID, "client-communication", "admin", 1, true, true)
+	if err != nil {
+		t.Fatalf("open host-owned configuration page: %v", err)
+	}
+	saved, err := manager.SaveSessionConfig(context.Background(), adminSession.Token, 1, true, "admin", config.Revision, []byte(`{"enabled":true,"provider_id":"https://panel.example","display_name":"Example"}`))
+	if err != nil {
 		t.Fatalf("apply Connect configuration: %v", err)
+	}
+	reloaded, err := manager.Config(installation.ID)
+	if err != nil {
+		t.Fatalf("reload saved Connect configuration: %v", err)
+	}
+	if !reloaded.Configured || reloaded.Revision != saved.Revision || !bytes.Contains(reloaded.Config, []byte(`"enabled":true`)) || !bytes.Contains(reloaded.Config, []byte(`"provider_id":"https://panel.example"`)) {
+		t.Fatalf("configuration page save did not persist: saved=%#v reloaded=%s", saved, reloaded.Config)
 	}
 
 	assertConnectPages(t, manager)
