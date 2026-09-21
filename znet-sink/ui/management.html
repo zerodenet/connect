@@ -259,7 +259,9 @@
         const raw = error?.message || String(error || '未知错误');
         const genericTransport = raw.includes('网络请求失败或元数据格式无效');
         let message = raw;
-        if (genericTransport && activeSource) {
+        if (raw.includes('subscription response must be base64 encoded')) {
+          message = '更新托管订阅失败：客户端拒绝了订阅内容编码，请更新 Connect 插件后重试。';
+        } else if (genericTransport && activeSource) {
           const route = activeSource.network_path === 'core' ? '通过代理内核' : '直接连接';
           const action = activeSource.network_path === 'core'
             ? '请点“修改连接方式”切换为“直接连接”后重试。'
@@ -799,15 +801,20 @@
         if (typeof projected.content !== 'string' || !projected.content) {
           throw new Error('服务没有返回可用的订阅内容。');
         }
-        const profile = await sdk('subscriptions.manage', 'self', 'subscription_apply', {
-          providerId: providerCapabilities.provider_id,
-          remoteSubscriptionId: subscriptionId,
-          sourceName: activeSource.name,
-          subscriptionName: projected.display_name || subscriptionName,
-          content: projected.content,
-          format: projected.format,
-          revision: projected.revision,
-        });
+        let profile;
+        try {
+          profile = await sdk('subscriptions.manage', 'self', 'subscription_apply', {
+            providerId: providerCapabilities.provider_id,
+            remoteSubscriptionId: subscriptionId,
+            sourceName: activeSource.name,
+            subscriptionName: projected.display_name || subscriptionName,
+            content: utf8Base64(projected.content),
+            format: projected.format,
+            revision: projected.revision,
+          });
+        } catch (error) {
+          throw operationFailure('subscription', error);
+        }
         const binding = {
           id: profile.id,
           name: profile.name,
@@ -1190,7 +1197,8 @@
           notice('订阅已交给客户端托管。', 'success');
           showView('complete');
         } catch (error) {
-          notice(error.message || '无法关联订阅', 'error');
+          const failure = operationFailure('subscription', error);
+          notice(failure.message, 'error');
         }
       }));
 

@@ -51,6 +51,8 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(html.includes("value?.phase === 'needs-authorization'"));
   assert.ok(html.includes("error.code = 'configuration_not_persisted'"));
   assert.ok(html.includes('客户端没有确认来源配置已经持久化'));
+  assert.ok(html.includes('content: utf8Base64(projected.content)'));
+  assert.ok(html.includes('客户端拒绝了订阅内容编码'));
   assert.ok(html.includes('last_failure: lastFailure'));
   assert.ok(html.includes('客户端返回：${raw}'));
   assert.ok(html.includes('请点“修改连接方式”切换为“直接连接”后重试'));

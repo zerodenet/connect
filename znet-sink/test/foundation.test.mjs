@@ -107,7 +107,10 @@ test('scheduled action refreshes one managed binding and message summary through
           issued_at: now, expires_at: now + 60, status: 'ok', body,
         })).toString('base64')});
       }
-      case 'subscription_apply': return ok({id: 'managed-1', name: 'Panel / Primary'});
+      case 'subscription_apply': {
+        assert.equal(Buffer.from(call.arguments.content, 'base64').toString('utf8'), 'proxies: []');
+        return ok({id: 'managed-1', name: 'Panel / Primary'});
+      }
       case 'notification_post': return ok(true);
       default: throw new Error(`unexpected SDK method ${call.method}`);
     }

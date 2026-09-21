@@ -333,7 +333,7 @@
         const profile = sdk('subscriptions.manage', 'self', 'subscription_apply', {
           providerId: capabilities.provider_id, remoteSubscriptionId: binding.remote_subscription_id,
           sourceName: source.name, subscriptionName: projected.display_name || binding.name,
-          content: projected.content, format: projected.format, revision: projected.revision,
+          content: base64(utf8(projected.content)), format: projected.format, revision: projected.revision,
         });
         setState('subscription/binding', {id: profile.id, name: profile.name, remote_subscription_id: binding.remote_subscription_id, revision: projected.revision});
         changed = true;

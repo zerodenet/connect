@@ -141,6 +141,10 @@ try {
       }
       if (method === 'persistent_secret_delete') return secrets.delete(args.key);
       if (method === 'subscription_apply') {
+        const decoded = new TextDecoder().decode(fromBase64(args.content));
+        if (decoded !== 'version: 1\nproxies: []\n') {
+          throw new Error('subscription response must be base64 encoded');
+        }
         return {id: 'connect:panel-example:7', name: `${args.sourceName} / ${args.subscriptionName}`};
       }
       if (method === 'subscription_remove' || method === 'schedule_put' || method === 'schedule_delete' || method === 'notification_post') return true;
