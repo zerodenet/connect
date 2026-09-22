@@ -8,6 +8,9 @@ if [ -z "$version" ]; then
 fi
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+gui_root=${ZNET_GUI_ROOT:-"$repo_root/../../rust/gui"}
+gui_manifest="$gui_root/src-tauri/Cargo.toml"
+test -f "$gui_manifest"
 published_at=${PUBLISHED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
 source_commit=$(git -C "$repo_root" rev-parse HEAD)
 
@@ -66,16 +69,13 @@ package_zboard darwin-amd64
 package_zboard darwin-arm64
 package_zboard windows-amd64
 
-go -C "$repo_root" run ./tools/packageznet \
-  -manifest "$repo_root/.build/znet-sink/manifest.json" \
-  -source "$repo_root/.build/znet-sink/foundation.mjs" \
-  -registration "$repo_root/znet-sink/package/registration.template.json" \
-  -management-page "$repo_root/.build/znet-sink/management.html" \
-  -management-page-id "manage" \
-  -management-page-title "Connect 管理" \
-  -key "$repo_root/.local/publisher.key" \
-  -out "$sink_package" \
-  -metadata "$sink_metadata"
+cargo build --manifest-path "$gui_manifest" -p znet-plugin-sandbox --bin znet-plugin --locked
+"$gui_root/src-tauri/target/debug/znet-plugin" pack \
+  "$repo_root/.build/znet-sink" \
+  "$repo_root/.local/publisher.seed" \
+  "$sink_package" \
+  "$sink_metadata" \
+  "$repo_root/.build/znet-sink-registration.json"
 
 python3 "$repo_root/scripts/generate_marketplace_entry.py" \
   "$repo_root/.build/release-build.json" \

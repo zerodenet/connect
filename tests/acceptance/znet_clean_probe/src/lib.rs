@@ -4,25 +4,17 @@ mod tests {
     use znet_plugin_sandbox::distribution::package;
 
     #[test]
-    fn connect_package_is_rejected_by_clean_host_capability_boundary() {
+    fn connect_application_package_is_accepted_by_clean_host() {
         let path = env::var("CONNECT_ZNET_PACKAGE").expect("CONNECT_ZNET_PACKAGE");
         let bytes = fs::read(path).expect("read Connect package");
         let registration = package::embedded_registration(&bytes)
             .expect("read embedded registration")
             .expect("package contains self-registration");
 
-        let error = match package::verify_local(&bytes, &registration) {
-            Ok(_) => panic!("clean host admitted unsupported Connect capabilities"),
-            Err(error) => error,
-        };
-        let message = error.to_string();
-        assert!(
-            message.contains("manifest")
-                || message.contains("capability")
-                || message.contains("payload")
-                || message.contains("unknown variant `https_origin_list`"),
-            "package failed for an unrelated reason: {message}"
-        );
-        eprintln!("clean host correctly rejected Connect: {message}");
+        let verified = package::verify_local(&bytes, &registration)
+            .expect("clean host accepts the signed application package");
+        assert_eq!(verified.id, "org.zerodenet.connect.znet-sink");
+        assert_eq!(verified.components.len(), 1);
+        assert_eq!(verified.pages.len(), 1);
     }
 }

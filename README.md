@@ -36,7 +36,8 @@ Sink. The ZBoard adapter serves its manifest-declared public routes through the 
 plugin route API; the client adapter performs provider verification, device authorization, managed
 subscription application/manual refresh, read-only messages, and the same renewal/subscription/
 message chain under a host-owned scheduled task. The same signed packages have passed installed-
-host and cross-product acceptance on committed, unmodified host baselines.
+host and cross-product acceptance on committed, unmodified host baselines. The client package now
+uses the signed multi-file application format rather than the earlier Base64 JSON envelope.
 
 See [the clean-host capability audit](docs/clean-host-capability-audit.md) for the host boundary and
 [the plugin capability status](docs/plugin-capability-status.md) for what Connect itself already

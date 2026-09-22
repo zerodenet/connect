@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestConnectPackageIsRejectedByCleanHostCapabilityBoundary(t *testing.T) {
+func TestConnectPackageIsAcceptedByCleanHost(t *testing.T) {
 	raw, err := os.ReadFile(os.Getenv("CONNECT_ZBOARD_PACKAGE"))
 	if err != nil {
 		t.Fatal(err)
@@ -58,13 +58,7 @@ func TestConnectPackageIsRejectedByCleanHostCapabilityBoundary(t *testing.T) {
 	_, err = ReadPackage(raw, map[string]string{
 		"zerodenet": strings.TrimSpace(os.Getenv("CONNECT_PUBLISHER_PUBLIC_KEY")),
 	})
-	if err == nil {
-		t.Fatal("clean host admitted Connect despite absent public capabilities")
+	if err != nil {
+		t.Fatalf("clean host rejected the signed Connect package: %v", err)
 	}
-	if !strings.Contains(err.Error(), "declare supported capabilities") &&
-		!strings.Contains(err.Error(), "unsupported or duplicate capability") &&
-		!strings.Contains(err.Error(), "invalid JSON or unsupported fields") {
-		t.Fatalf("package failed for an unrelated reason: %v", err)
-	}
-	t.Logf("clean host correctly rejected the package at capability admission: %v", err)
 }

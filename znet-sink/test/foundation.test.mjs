@@ -4,6 +4,13 @@ import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {createHash} from 'node:crypto';
 
+const moduleSource = await readFile(new URL('../src/foundation.mjs', import.meta.url), 'utf8');
+const runComponent = context => vm.runInNewContext(
+  moduleSource.replace(/^export default function connectComponent\(\) \{/u, '(function connectComponent() {').replace(/\n\}\s*$/u, '\n})()'),
+  context,
+  {timeout: 1000},
+);
+
 test('declarative source configuration excludes keys and account credentials', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package/manifest.template.json', import.meta.url), 'utf8'));
   const ids = manifest.configuration.fields.map((field) => field.id);
@@ -21,14 +28,14 @@ test('provider component owns a page-independent scheduled synchronization actio
   assert.ok(source.includes("'subscriptions.get-content'"));
   assert.ok(source.includes("'messages.list'"));
   assert.ok(source.includes("'subscription_apply'"));
-  const result = vm.runInNewContext(source, {
+  const result = runComponent({
     hostSdkCall: () => { throw new Error('scheduled action must not call the host before interactive setup'); },
     pluginInput: {
       configuration: {provider_origins: '["https://panel.example.com"]'},
       state: {'sources/index': JSON.stringify([{id: 'source-1', name: 'Panel', origin: 'https://panel.example.com', network_path: 'direct'}])},
       invocation: {action: 'lifecycle.scheduled.sync.source-1', payload: {taskId: 'connect-sync-source-1'}, now_unix_ms: Date.now()},
     },
-  }, {timeout: 100});
+  });
   assert.equal(result.value.skipped, true);
   assert.equal(result.value.reason, 'interactive_setup_required');
 });
@@ -112,7 +119,7 @@ test('scheduled action refreshes one managed binding and message summary through
       default: throw new Error(`unexpected SDK method ${call.method}`);
     }
   };
-  const result = vm.runInNewContext(source, {
+  const result = runComponent({
     hostSdkCall,
     pluginInput: {
       configuration: {provider_origins: JSON.stringify([origin])},
@@ -130,7 +137,7 @@ test('scheduled action refreshes one managed binding and message summary through
       },
       invocation: {action: 'lifecycle.scheduled.sync.source-1', payload: {taskId: 'connect-sync-source-1'}, now_unix_ms: now * 1000},
     },
-  }, {timeout: 1000});
+  });
   assert.equal(result.value.ok, true);
   assert.equal(result.value.changed, true);
   assert.equal(result.value.unread, 1);
@@ -145,7 +152,7 @@ test('scheduled action refreshes one managed binding and message summary through
 
 test('provider component requires configuration before remote stages', async () => {
   const source = await readFile(new URL('../src/foundation.mjs', import.meta.url), 'utf8');
-  const result = vm.runInNewContext(source, {pluginInput: {configuration: {}, invocation: {action: 'status.get'}}}, {timeout: 100});
+  const result = runComponent({pluginInput: {configuration: {}, invocation: {action: 'status.get'}}});
   assert.equal(result.znet_plugin_result, 1);
   assert.equal(result.value.product_id, 'org.zerodenet.connect');
   assert.equal(result.value.phase, 'needs-configuration');
@@ -156,7 +163,7 @@ test('provider component delegates interactive verification to the signed manage
   const source = await readFile(new URL('../src/foundation.mjs', import.meta.url), 'utf8');
   const configuredSource = {id:'source-1', name:'My panel', origin:'https://panel.example.com', network_path:'direct'};
   const configuration = {provider_origins: JSON.stringify([configuredSource.origin])};
-  const result = vm.runInNewContext(source, {pluginInput: {configuration, state:{'sources/index':JSON.stringify([configuredSource])}, invocation: {action: 'status.get'}}}, {timeout: 100});
+  const result = runComponent({pluginInput: {configuration, state:{'sources/index':JSON.stringify([configuredSource])}, invocation: {action: 'status.get'}}});
   assert.equal(result.value.sources[0].origin, configuredSource.origin);
   assert.equal(result.value.capability_gap, null);
   assert.equal(result.value.phase, 'needs-interactive-setup');
@@ -172,7 +179,7 @@ test('provider component reports persisted non-secret setup progress without rem
     'source/source-1/subscription/binding':'opaque-base64',
     'source/source-1/messages/summary':'opaque-base64',
   };
-  const result = vm.runInNewContext(source, {pluginInput: {configuration, state, invocation: {action: 'status.get'}}}, {timeout: 100});
+  const result = runComponent({pluginInput: {configuration, state, invocation: {action: 'status.get'}}});
   assert.equal(result.value.phase, 'ready');
   assert.equal(result.value.checks.find(item => item.id === 'subscription-binding').state, 'ready');
 });
@@ -180,11 +187,11 @@ test('provider component reports persisted non-secret setup progress without rem
 test('password authorization never returns or persists the submitted password', async () => {
   const source = await readFile(new URL('../src/foundation.mjs', import.meta.url), 'utf8');
   const secret = 'do-not-persist-this';
-  const result = vm.runInNewContext(source, {pluginInput: {
+  const result = runComponent({pluginInput: {
     configuration: {provider_origins:'["https://panel.example.com"]'},
     state: {'sources/index':JSON.stringify([{id:'source-1', name:'Panel', origin:'https://panel.example.com', network_path:'direct'}])},
     invocation: {action: 'authorization.password', payload: {account: 'user@example.com', password: secret}},
-  }}, {timeout: 100});
+  }});
   assert.equal(result.value.code, 'interactive_page_required');
   assert.deepEqual(Object.keys(result.state_updates), []);
   assert.equal(JSON.stringify(result).includes(secret), false);

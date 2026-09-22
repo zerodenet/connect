@@ -1,4 +1,4 @@
-(() => {
+export default function connectComponent() {
   const input = globalThis.pluginInput ?? {};
   const configuration = input.configuration ?? {};
   const state = input.state ?? {};
@@ -395,4 +395,4 @@
     return scheduledSync(invocation.action.slice('lifecycle.scheduled.sync.'.length));
   }
   return envelope({ok: false, code: 'unsupported_action', message: '当前 Connect 版本不支持此操作。'});
-})()
+}

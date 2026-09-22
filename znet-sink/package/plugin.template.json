@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "host": "znet-sink",
+  "plugin_id": "org.zerodenet.connect.znet-sink",
+  "version": "0.0.1",
+  "components": [
+    {
+      "id": "provider-source",
+      "manifest": "components/provider-source/manifest.json",
+      "entry": "components/provider-source/index.mjs"
+    }
+  ],
+  "pages": [
+    {
+      "id": "manage",
+      "title": "Connect 管理",
+      "kind": "management",
+      "entry": "ui/manage/index.html",
+      "scripts": ["ui/manage/page.js"]
+    }
+  ],
+  "files": {}
+}

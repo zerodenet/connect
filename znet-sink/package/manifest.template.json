@@ -6,7 +6,7 @@
   "version": "0.0.1",
   "requires_host": ">=0.0.2, <0.1.0",
   "api_version": 1,
-  "runtime": "javascript-v1",
+  "runtime": "javascript-module-v1",
   "minimum_isolation": "vm",
   "targets": "any",
   "required": [

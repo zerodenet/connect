@@ -1,13 +1,13 @@
 # ZNet Sink package
 
-`src/binding.mjs` implements host-independent source-binding and late-result checks that can be
-moved behind the eventual ZNet Sink SDK. The client can render, validate, persist, and pass the
-signed manifest's declarative configuration into the isolated component. The current local test
-package uses that path to collect a source name, provider HTTPS origin, and network-path
-preference. A server-key fingerprint is deliberately not a configuration field: after the source
-is saved, the plugin must discover the remote Connect endpoint and establish the service identity
-and device-key binding through the authenticated protocol. Username and password are transient
-inputs on the plugin's own page and must not be persisted in ordinary configuration.
+Connect now uses the client's signed `.zspkg` application package v1: a ZIP with `plugin.json`,
+an isolated `javascript-module-v1` component, and separate management HTML and JavaScript files.
+The packer signs the root manifest and indexes every file by SHA-256. The previous JSON/Base64
+envelope is retained only by the client as a compatibility reader; Connect's build and acceptance
+paths no longer produce it. `src/binding.mjs` remains the host-independent source-binding model.
+The component's declarative configuration contains only the allowed HTTPS origins. The page
+collects the source name and network path and holds account credentials only for the current
+authorization attempt. A server-key fingerprint is never a user-editable configuration field.
 
 The signed management page now owns the interactive business flow: configured-origin discovery,
 provider identity and signed HPKE-key verification, device-key creation, password authorization,
@@ -38,7 +38,8 @@ acceptance on ZNet Sink commit `8e1972cbfe15579dee631caa607f0a2c4d1fff25`. The h
 configured-origin networking, persistent secrets, device crypto, managed subscriptions,
 notifications and scheduled actions through provider-neutral capabilities.
 
-Do not package the example origin or zero source digest for a business release. Package preparation
-preserves the declared least-privilege permissions, replaces the source digest, and applies the
-publisher signature. The build gate records and verifies the accepted host baselines before
-creating artifacts.
+`scripts/prepare_znet_app.py` stages the source tree and fills the component version and entry
+digest; the client's `znet-plugin pack` signs it with the local publisher seed. The same staged
+structure is used by the installed-host and cross-host acceptance scripts. The package is not
+published until those tests and the ZBoard release-readiness gate pass. The legacy Go packer
+remains for historical envelope tests but is no longer used for Connect releases.

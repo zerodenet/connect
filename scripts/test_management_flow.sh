@@ -19,5 +19,6 @@ fi
 
 ZNET_PLAYWRIGHT_ENTRY="$playwright_entry" \
 CONNECT_MANAGEMENT_PAGE="$repo_root/znet-sink/ui/management.html" \
+CONNECT_MANAGEMENT_SCRIPT="$repo_root/znet-sink/ui/page.js" \
 ZNET_ACCEPTANCE_BROWSER="$browser" \
   "$node_bin" "$repo_root/tests/acceptance/znet_management.mjs"

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const html = await readFile(new URL('../ui/management.html', import.meta.url), 'utf8');
+const script = await readFile(new URL('../ui/page.js', import.meta.url), 'utf8');
 
 test('management page follows the host settings standard and exposes a progressive workflow', () => {
   for (const marker of ['添加来源', '保存并检查', '确认服务', '授权此设备', '选择订阅', '立即同步', '服务消息', '移除来源', '技术诊断']) {
@@ -19,38 +20,38 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(html.includes('data-znet-select-trigger'));
   assert.ok(html.includes('role="listbox"'));
   assert.ok(html.includes('role="option"'));
-  assert.ok(html.includes("network_path: networkPath"));
-  assert.ok(html.includes("znetPlugin.configuration.save"));
-  assert.ok(html.includes("znetPlugin.capabilities.call"));
-  assert.ok(html.includes("network.configured.request"));
-  assert.ok(html.includes("crypto_hpke_seal"));
-  assert.ok(html.includes("subscription_apply"));
-  assert.ok(html.includes("authorization.password"));
-  assert.ok(html.includes("messages.get"));
-  assert.ok(html.includes("messages.mark-read"));
-  assert.ok(html.includes("requiredOperations"));
-  assert.ok(html.includes("90 * 24 * 60 * 60"));
-  assert.ok(html.includes("response.expires_at - response.issued_at > 120"));
-  assert.ok(html.includes('taskId: sourceTaskId(activeSource)'));
-  assert.ok(html.includes("intervalSeconds: 900"));
-  assert.ok(html.includes("znetPlugin.navigation?.initial?.()"));
-  assert.ok(html.includes("route: `messages.${activeSource.id}`"));
-  assert.ok(html.includes("'subscription_remove'"));
-  assert.ok(html.includes("statePut('sources/index'"));
-  assert.ok(html.includes("code === 'communication_disabled'"));
-  assert.ok(html.includes('来源已保存，但 ZBoard 尚未启用 Connect'));
-  assert.ok(html.includes("code === 'permission_denied'"));
-  assert.ok(html.includes('打开上方“权限”页'));
+  assert.ok(script.includes("network_path: networkPath"));
+  assert.ok(script.includes("znetPlugin.configuration.save"));
+  assert.ok(script.includes("znetPlugin.capabilities.call"));
+  assert.ok(script.includes("network.configured.request"));
+  assert.ok(script.includes("crypto_hpke_seal"));
+  assert.ok(script.includes("subscription_apply"));
+  assert.ok(script.includes("authorization.password"));
+  assert.ok(script.includes("messages.get"));
+  assert.ok(script.includes("messages.mark-read"));
+  assert.ok(script.includes("requiredOperations"));
+  assert.ok(script.includes("90 * 24 * 60 * 60"));
+  assert.ok(script.includes("response.expires_at - response.issued_at > 120"));
+  assert.ok(script.includes('taskId: sourceTaskId(activeSource)'));
+  assert.ok(script.includes("intervalSeconds: 900"));
+  assert.ok(script.includes("znetPlugin.navigation?.initial?.()"));
+  assert.ok(script.includes("route: `messages.${activeSource.id}`"));
+  assert.ok(script.includes("'subscription_remove'"));
+  assert.ok(script.includes("statePut('sources/index'"));
+  assert.ok(script.includes("code === 'communication_disabled'"));
+  assert.ok(script.includes('来源已保存，但 ZBoard 尚未启用 Connect'));
+  assert.ok(script.includes("code === 'permission_denied'"));
+  assert.ok(script.includes('打开上方“权限”页'));
   assert.ok(html.includes('id="backServiceSources"'));
-  assert.ok(html.includes("actions.setAttribute('data-znet-actions', '')"));
-  assert.ok(html.includes("open.setAttribute('data-variant', 'outline')"));
-  assert.ok(html.includes("open.textContent = '管理来源'"));
+  assert.ok(script.includes("actions.setAttribute('data-znet-actions', '')"));
+  assert.ok(script.includes("open.setAttribute('data-variant', 'outline')"));
+  assert.ok(script.includes("open.textContent = '管理来源'"));
 });
 
 test('management page does not poll, bypass the host, or persist account secrets', () => {
-  assert.equal(/setInterval|requestAnimationFrame/.test(html), false);
-  assert.equal(/\bfetch\s*\(/.test(html), false);
-  assert.equal(/XMLHttpRequest|WebSocket|localStorage|sessionStorage/.test(html), false);
-  assert.ok(html.includes("byId('password').value = ''"));
-  assert.equal(/storage\.(?:put|putJson)\([^)]*password/i.test(html), false);
+  assert.equal(/setInterval|requestAnimationFrame/.test(script), false);
+  assert.equal(/\bfetch\s*\(/.test(script), false);
+  assert.equal(/XMLHttpRequest|WebSocket|localStorage|sessionStorage/.test(script), false);
+  assert.ok(script.includes("byId('password').value = ''"));
+  assert.equal(/storage\.(?:put|putJson)\([^)]*password/i.test(script), false);
 });

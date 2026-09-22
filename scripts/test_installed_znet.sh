@@ -22,21 +22,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 version="0.0.2-dev.$(date -u +%Y%m%d%H%M)"
-go -C "$repo_root" run ./tests/acceptance/prepare_znet \
-  -template "$repo_root/znet-sink/package/manifest.template.json" \
-  -source "$repo_root/znet-sink/src/foundation.mjs" \
-  -out "$accept_root/manifest.json" \
-  -version "$version"
-go -C "$repo_root" run ./tools/packageznet \
-  -manifest "$accept_root/manifest.json" \
-  -source "$repo_root/znet-sink/src/foundation.mjs" \
-  -registration "$repo_root/znet-sink/package/registration.template.json" \
-  -management-page "$repo_root/znet-sink/ui/management.html" \
-  -management-page-id manage \
-  -management-page-title "Connect 管理" \
-  -key "$repo_root/.local/publisher.key" \
-  -out "$accept_root/connect.zspkg" \
-  -metadata "$accept_root/release.json"
+go -C "$repo_root" run ./tools/keyderive "$repo_root/.local/publisher.key" "$repo_root/.local/publisher.key.pub"
+public_key=$(tr -d '\r\n' < "$repo_root/.local/publisher.key.pub")
+python3 "$repo_root/scripts/prepare_znet_app.py" \
+  --out "$accept_root/app" --version "$version" \
+  --registration-out "$accept_root/registration.json" --public-key "$public_key"
+cargo build --manifest-path "$manifest_path" -p znet-plugin-sandbox --bin znet-plugin --locked
+"$gui_root/src-tauri/target/debug/znet-plugin" pack \
+  "$accept_root/app" "$repo_root/.local/publisher.seed" \
+  "$accept_root/connect.zspkg" "$accept_root/release.json" "$accept_root/registration.json"
 
 ZNET_EXTERNAL_PLUGIN_PACKAGE="$accept_root/connect.zspkg" \
 ZNET_EXTERNAL_PLUGIN_ID="org.zerodenet.connect.znet-sink" \

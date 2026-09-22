@@ -201,6 +201,43 @@ def read_zboard(path):
 
 
 def read_znet_sink(path):
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            require(len(names) == len(set(names)) and len(names) <= 258,
+                    "duplicate or oversized application package index")
+            root = json.loads(archive.read("plugin.json"))
+            signature = json.loads(archive.read("META-INF/signature.json"))
+            require(signature.get("format") == "znet-sink.plugin-package.v1", "unsupported application package")
+            indexed = root.get("files", {})
+            require(set(names) == set(indexed) | {"plugin.json", "META-INF/signature.json"},
+                    "application package file index differs")
+            for name, digest in indexed.items():
+                content = archive.read(name)
+                require(len(content) == digest["size"] and hashlib.sha256(content).hexdigest() == digest["sha256"],
+                        "application package file digest differs")
+            capabilities = set()
+            for component in root["components"]:
+                manifest = json.loads(archive.read(component["manifest"]))
+                require(manifest["plugin_id"] == root["plugin_id"] and manifest["component_id"] == component["id"]
+                        and manifest["version"] == root["version"] and manifest["runtime"] == "javascript-module-v1"
+                        and hashlib.sha256(archive.read(component["entry"])).hexdigest() == manifest["source_sha256"],
+                        "application component identity differs")
+                capabilities.update(permission["capability"] for permission in manifest.get("required", []))
+                capabilities.update(permission["capability"] for permission in manifest.get("optional", []))
+            registration = signature.get("registration")
+            require(registration and registration["id"] == root["plugin_id"],
+                    "embedded registration identity differs")
+            validate_publisher(registration["publisher"])
+            require(set(registration["capabilities"]) == capabilities,
+                    "embedded registration capability ceiling differs")
+            surfaces = registration["surfaces"]
+            require(surfaces == ["znet-sink.ui.management.v1"], "embedded registration surface differs")
+            require(any(page.get("id") == "manage" and page.get("kind") == "management"
+                        and archive.read(page["entry"]) and all(archive.read(script) for script in page.get("scripts", []))
+                        for page in root.get("pages", [])), "signed management page is missing")
+        return {"host": "znet-sink", "package_id": root["plugin_id"], "version": root["version"],
+                "surfaces": surfaces, "capabilities": sorted(capabilities), "signature": signature["signature"]}
     envelope = json.loads(path.read_text())
     package_format = envelope.get("format")
     if package_format not in {"znet-sink.plugin-package.v1", "znet-sink.plugin-package.v2"}:

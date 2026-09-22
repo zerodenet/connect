@@ -14,6 +14,7 @@ product = load("marketplace/product-registration.template.json")
 release = load("marketplace/release-build.template.json")
 zboard = load("zboard/package/manifest.template.json")
 sink = load("znet-sink/package/manifest.template.json")
+sink_app = load("znet-sink/package/plugin.template.json")
 
 assert contract["schema_version"] == 1
 assert contract["status"] == "p0-wire-v1-frozen"
@@ -27,6 +28,10 @@ assert release["publisher"] == product["publisher"]
 assert release["source_commit"] == "0" * 40
 assert product["publisher"]["public_key"] == "A" * 43 + "="
 assert sink["source_sha256"] == "0" * 64
+assert sink["runtime"] == "javascript-module-v1"
+assert sink_app["plugin_id"] == sink["plugin_id"]
+assert sink_app["components"][0]["entry"] == "components/provider-source/index.mjs"
+assert sink_app["pages"][0]["scripts"] == ["ui/manage/page.js"]
 assert zboard["files"] == {}
 assert {Path(item["path"]).suffix for item in release["artifacts"]} == {".zbplugin", ".zspkg"}
 zboard_platforms = set(zboard["components"]["server"]["executables"])
@@ -59,6 +64,7 @@ assert set(targets["znet-sink"]["capabilities"]) == {
 }
 assert set(targets["znet-sink"]["surfaces"]) == {"znet-sink.ui.management.v1"}
 assert (ROOT / "znet-sink/ui/management.html").is_file()
+assert (ROOT / "znet-sink/ui/page.js").is_file()
 assert (ROOT / "zboard/ui/account/index.html").is_file()
 assert (ROOT / "zboard/ui/admin/index.html").is_file()
 prepare_source = (ROOT / "scripts/prepare_dev.py").read_text()
@@ -68,8 +74,8 @@ assert '"optional": []' not in prepare_source
 assert "-X main.pluginVersion=${version}" in build_source
 marketplace_source = (ROOT / "scripts/generate_marketplace_entry.py").read_text()
 verify_source = (ROOT / "tools/verifydev/main.go").read_text()
-assert 'znet-sink.plugin-package.v2' in marketplace_source
-assert 'znet-sink.plugin-package.v2' in verify_source
+assert 'znet-sink.plugin-package.v1' in marketplace_source
+assert 'znet-sink.plugin-package.v1' in verify_source
 admin_page = (ROOT / "zboard/ui/admin/index.html").read_text()
 account_page = (ROOT / "zboard/ui/account/index.html").read_text()
 assert "call('config.load')" in admin_page
@@ -91,6 +97,7 @@ for source in (ROOT / "zboard/runtime").glob("*.go"):
         assert forbidden not in text, f"{source.relative_to(ROOT)} crosses host boundary: {forbidden}"
 for source in [
     ROOT / "znet-sink/ui/management.html",
+    ROOT / "znet-sink/ui/page.js",
     *sorted((ROOT / "znet-sink/src").glob("*.mjs")),
 ]:
     text = source.read_text()

@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-const sinkDomainV2 = "znet-sink.plugin-package.v2\x00"
+const sinkDomainApplication = "znet-sink.plugin-package.v1.zip\x00"
 
 type signature struct {
 	PublicKey string `json:"public_key"`
@@ -67,26 +67,26 @@ type sinkPermission struct {
 	Capability string `json:"capability"`
 }
 
-type sinkPayload struct {
+type sinkApplication struct {
 	Host       string `json:"host"`
 	PluginID   string `json:"plugin_id"`
 	Version    string `json:"version"`
 	Components []struct {
-		Manifest struct {
-			PluginID     string           `json:"plugin_id"`
-			Version      string           `json:"version"`
-			SourceSHA256 string           `json:"source_sha256"`
-			Required     []sinkPermission `json:"required"`
-			Optional     []sinkPermission `json:"optional"`
-		} `json:"manifest"`
-		Source string `json:"source"`
+		ID       string `json:"id"`
+		Manifest string `json:"manifest"`
+		Entry    string `json:"entry"`
 	} `json:"components"`
 	Pages []struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
-		Kind  string `json:"kind"`
-		HTML  string `json:"html"`
+		ID      string   `json:"id"`
+		Title   string   `json:"title"`
+		Kind    string   `json:"kind"`
+		Entry   string   `json:"entry"`
+		Scripts []string `json:"scripts"`
 	} `json:"pages"`
+	Files map[string]struct {
+		SHA256 string `json:"sha256"`
+		Size   int64  `json:"size"`
+	} `json:"files"`
 }
 
 func main() {
@@ -219,24 +219,44 @@ func verifyZBoard(path, version string, key ed25519.PublicKey) (string, error) {
 }
 
 func verifySink(path, version string, key ed25519.PublicKey) error {
-	raw, err := os.ReadFile(path)
+	archive, err := zip.OpenReader(path)
 	if err != nil {
 		return err
 	}
+	defer archive.Close()
+	files := map[string][]byte{}
+	for _, file := range archive.File {
+		if _, exists := files[file.Name]; exists || file.FileInfo().IsDir() {
+			return errors.New("duplicate or directory package entry")
+		}
+		handle, err := file.Open()
+		if err != nil {
+			return err
+		}
+		value, err := io.ReadAll(io.LimitReader(handle, 4*1024*1024+1))
+		handle.Close()
+		if err != nil || len(value) > 4*1024*1024 {
+			return errors.New("invalid package entry")
+		}
+		files[file.Name] = value
+	}
 	var signed envelope
-	if err := json.Unmarshal(raw, &signed); err != nil {
+	if err := json.Unmarshal(files["META-INF/signature.json"], &signed); err != nil {
 		return err
 	}
-	payload, err := base64.StdEncoding.DecodeString(signed.Payload)
-	if err != nil || signed.Format != "znet-sink.plugin-package.v2" || len(signed.Registration) == 0 {
-		return errors.New("invalid package envelope")
+	if signed.Format != "znet-sink.plugin-package.v1" || len(signed.Registration) == 0 || len(signed.Payload) != 0 {
+		return errors.New("invalid application signature envelope")
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, signed.Registration); err != nil {
+		return err
 	}
 	signatureBytes, err := base64.StdEncoding.DecodeString(signed.Signature)
-	message := append([]byte(sinkDomainV2), signed.Registration...)
+	message := append([]byte(sinkDomainApplication), compact.Bytes()...)
 	message = append(message, 0)
-	message = append(message, payload...)
+	message = append(message, files["plugin.json"]...)
 	if err != nil || !ed25519.Verify(key, message, signatureBytes) {
-		return errors.New("invalid package signature")
+		return errors.New("invalid application package signature")
 	}
 	var registration sinkRegistration
 	if err := json.Unmarshal(signed.Registration, &registration); err != nil {
@@ -247,19 +267,42 @@ func verifySink(path, version string, key ed25519.PublicKey) error {
 		strings.Join(registration.Surfaces, ",") != "znet-sink.ui.management.v1" {
 		return errors.New("embedded local-install registration differs")
 	}
-	var document sinkPayload
-	if err := json.Unmarshal(payload, &document); err != nil {
+	var document sinkApplication
+	if err := json.Unmarshal(files["plugin.json"], &document); err != nil {
 		return err
 	}
-	if document.Host != "znet-sink" || document.PluginID != "org.zerodenet.connect.znet-sink" || document.Version != version || len(document.Components) == 0 {
+	if document.Host != "znet-sink" || document.PluginID != "org.zerodenet.connect.znet-sink" || document.Version != version || len(document.Components) != 1 {
 		return errors.New("package identity, version, or components differ")
+	}
+	if len(files) != len(document.Files)+2 {
+		return errors.New("application package has undeclared files")
+	}
+	for name, digest := range document.Files {
+		value, exists := files[name]
+		if !exists || int64(len(value)) != digest.Size || hex.EncodeToString(hash(value)) != digest.SHA256 {
+			return fmt.Errorf("application file digest differs: %s", name)
+		}
 	}
 	capabilities := map[string]bool{}
 	for _, component := range document.Components {
-		if component.Manifest.PluginID != document.PluginID || component.Manifest.Version != version || !bytes.Equal(hash([]byte(component.Source)), decodeHex(component.Manifest.SourceSHA256)) {
+		var manifest struct {
+			PluginID     string           `json:"plugin_id"`
+			ComponentID  string           `json:"component_id"`
+			Version      string           `json:"version"`
+			Runtime      string           `json:"runtime"`
+			SourceSHA256 string           `json:"source_sha256"`
+			Required     []sinkPermission `json:"required"`
+			Optional     []sinkPermission `json:"optional"`
+		}
+		if err := json.Unmarshal(files[component.Manifest], &manifest); err != nil {
+			return err
+		}
+		if component.ID != "provider-source" || component.Entry != "components/provider-source/index.mjs" ||
+			manifest.PluginID != document.PluginID || manifest.ComponentID != component.ID || manifest.Version != version ||
+			manifest.Runtime != "javascript-module-v1" || !bytes.Equal(hash(files[component.Entry]), decodeHex(manifest.SourceSHA256)) {
 			return errors.New("component identity or source digest differs")
 		}
-		for _, permission := range append(component.Manifest.Required, component.Manifest.Optional...) {
+		for _, permission := range append(manifest.Required, manifest.Optional...) {
 			capabilities[permission.Capability] = true
 		}
 	}
@@ -272,9 +315,10 @@ func verifySink(path, version string, key ed25519.PublicKey) error {
 		}
 	}
 	if len(document.Pages) != 1 || document.Pages[0].ID != "manage" || document.Pages[0].Kind != "management" || document.Pages[0].Title == "" ||
-		!strings.Contains(document.Pages[0].HTML, "data-znet-layout=\"settings\"") ||
-		!strings.Contains(document.Pages[0].HTML, "znetPlugin.capabilities.call") ||
-		!strings.Contains(document.Pages[0].HTML, "znetPlugin.configuration.save") {
+		document.Pages[0].Entry != "ui/manage/index.html" || len(document.Pages[0].Scripts) != 1 || document.Pages[0].Scripts[0] != "ui/manage/page.js" ||
+		!strings.Contains(string(files[document.Pages[0].Entry]), "data-znet-layout=\"settings\"") ||
+		!strings.Contains(string(files[document.Pages[0].Scripts[0]]), "znetPlugin.capabilities.call") ||
+		!strings.Contains(string(files[document.Pages[0].Scripts[0]]), "znetPlugin.configuration.save") {
 		return errors.New("ZNet Sink management page differs")
 	}
 	return nil

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import base64
-import hashlib
 import json
 from pathlib import Path
 import re
 import shutil
+from prepare_znet_app import stage as stage_znet_app
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.compile(r"(?:0\.0\.1(?:-dev\.[0-9]{12})?|0\.0\.2-dev\.[0-9]{12})")
@@ -59,7 +59,8 @@ def main():
         raise SystemExit("Connect package build is blocked: ZBoard release readiness is incomplete")
 
     build = ROOT / ".build"
-    shutil.rmtree(build, ignore_errors=True)
+    if build.exists():
+        shutil.rmtree(build)
     (ROOT / "dist").mkdir(exist_ok=True)
 
     channel = "dev" if "-dev." in args.version else "stable"
@@ -87,20 +88,10 @@ def main():
         }
         write(zboard_root / "manifest.json", platform_manifest)
 
-    source = (ROOT / "znet-sink/src/foundation.mjs").read_text()
-    sink = load("znet-sink/package/manifest.template.json")
-    sink.update({
-        "component_id": "provider-source",
-        "version": args.version,
-        "lifecycle": ["host_start"],
-        "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
-    })
-    sink_root = build / "znet-sink"
-    write(sink_root / "manifest.json", sink)
-    sink_root.joinpath("foundation.mjs").write_text(source)
-    sink_root.joinpath("management.html").write_text(
-        (ROOT / "znet-sink/ui/management.html").read_text()
-    )
+    stage_znet_app(build / "znet-sink", args.version)
+    sink_registration = load("znet-sink/package/registration.template.json")
+    sink_registration["publisher"]["public_key"] = args.public_key
+    write(build / "znet-sink-registration.json", sink_registration)
 
     listing = load("marketplace/product-registration.template.json")
     listing["publisher"]["public_key"] = args.public_key

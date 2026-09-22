@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 
 const playwrightEntry = process.env.ZNET_PLAYWRIGHT_ENTRY;
 const managementPage = process.env.CONNECT_MANAGEMENT_PAGE;
+const managementScript = process.env.CONNECT_MANAGEMENT_SCRIPT;
 const browserExecutable = process.env.ZNET_ACCEPTANCE_BROWSER;
-if (!playwrightEntry || !managementPage || !browserExecutable) {
+if (!playwrightEntry || !managementPage || !managementScript || !browserExecutable) {
   throw new Error('management acceptance requires Playwright, page, and browser paths');
 }
 
@@ -51,6 +53,8 @@ try {
     let configuration = {};
     let lastRequest = null;
     let messageRead = false;
+    let failNextStateWrite = false;
+    let communicationEnabled = true;
     const bytes = (length, fill) => new Uint8Array(length).fill(fill);
     const standardBase64 = input => {
       let binary = '';
@@ -102,6 +106,7 @@ try {
       calls.push({method, args: structuredClone(args)});
       if (method === 'configured_request') {
         if (args.url === `${value.origin}/.well-known/zerodenet-connect/v1/capabilities`) {
+          if (!communicationEnabled) return {status: 503, headers: {}, body: JSON.stringify({error: 'communication_disabled'})};
           return {status: 200, headers: {'content-type': 'application/json'}, body: JSON.stringify(value.capabilities)};
         }
         if (args.url !== `${value.origin}/.well-known/zerodenet-connect/v1/exchange`) throw new Error(`unexpected URL ${args.url}`);
@@ -154,7 +159,13 @@ try {
       },
       storage: {
         getJson: async (_component, _area, key) => structuredClone(state.get(key) ?? null),
-        putJson: async (_component, _area, key, next) => { state.set(key, structuredClone(next)); return true; },
+        putJson: async (_component, _area, key, next) => {
+          if (key === 'sources/index' && failNextStateWrite) {
+            failNextStateWrite = false;
+            throw new Error('fixture state write failed');
+          }
+          state.set(key, structuredClone(next)); return true;
+        },
         delete: async (_component, _area, key) => state.delete(key),
       },
       capabilities: {call: capabilityCall},
@@ -166,10 +177,14 @@ try {
       calls: structuredClone(calls),
       messageRead,
     });
+    globalThis.__connectAcceptanceFailNextStateWrite = () => { failNextStateWrite = true; };
+    globalThis.__connectAcceptanceSetCommunication = enabled => { communicationEnabled = enabled; };
   }, fixture);
 
   const page = await context.newPage();
   await page.goto(pathToFileURL(managementPage).href);
+  const signedScript = await readFile(managementScript);
+  await page.addScriptTag({url: `data:text/javascript;base64,${signedScript.toString('base64')}`});
   await page.locator('#view-sources').waitFor({state: 'visible'});
   await page.locator('#addSource').click();
   await page.locator('#sourceName').fill('Acceptance ZBoard');
@@ -179,6 +194,13 @@ try {
   assert.equal(await page.locator('#networkPathValue').textContent(), '通过代理内核');
   await page.locator('#networkPath').click();
   await page.locator('[data-znet-select-option][data-value="direct"]').click();
+  await page.evaluate(() => globalThis.__connectAcceptanceFailNextStateWrite());
+  await page.locator('#save').click();
+  await page.locator('#notice').getByText('来源未保存，已恢复先前配置', {exact: false}).waitFor();
+  const failedSave = await page.evaluate(() => globalThis.__connectAcceptanceSnapshot());
+  assert.deepEqual(failedSave.configuration, {provider_origins: '[]'});
+  assert.deepEqual(failedSave.state['sources/index'], []);
+  assert.equal(await page.locator('#view-source').isVisible(), true);
   await page.locator('#save').click();
   await page.locator('#continueAccount').waitFor({state: 'visible'});
   assert.equal(await page.locator('#serviceTitle').textContent(), '服务已确认');
@@ -196,6 +218,13 @@ try {
   await page.locator('#messageList button', {hasText: '查看'}).click();
   await page.locator('#messageDetail').waitFor({state: 'visible'});
   assert.equal(await page.locator('#messageDetailBody').textContent(), 'Installed management flow works.');
+
+  await page.evaluate(() => globalThis.__connectAcceptanceSetCommunication(false));
+  await page.locator('#backCompleteSources').click();
+  await page.locator('#sourceList button', {hasText: '管理来源'}).click();
+  await page.locator('#view-service').waitFor({state: 'visible'});
+  assert.equal(await page.locator('#serviceTitle').textContent(), 'ZBoard 尚未启用 Connect');
+  await page.evaluate(() => globalThis.__connectAcceptanceSetCommunication(true));
 
   const snapshot = await page.evaluate(() => globalThis.__connectAcceptanceSnapshot());
   assert.deepEqual(JSON.parse(snapshot.configuration.provider_origins), [origin]);
