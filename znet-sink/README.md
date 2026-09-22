@@ -1,7 +1,7 @@
 # ZNet Sink package
 
 Connect now uses the client's signed `.zspkg` application package v1: a ZIP with `plugin.json`,
-an isolated `javascript-module-v1` component, and separate management HTML and JavaScript files.
+an isolated `javascript-module-v1` component with a separate scheduled-sync module, and separate management HTML and JavaScript files.
 The packer signs the root manifest and indexes every file by SHA-256. The previous JSON/Base64
 envelope is retained only by the client as a compatibility reader; Connect's build and acceptance
 paths no longer produce it. `src/binding.mjs` remains the host-independent source-binding model.

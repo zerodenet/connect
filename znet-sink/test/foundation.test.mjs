@@ -1,15 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import vm from 'node:vm';
 import {createHash} from 'node:crypto';
+import connectComponent from '../src/foundation.mjs';
 
-const moduleSource = await readFile(new URL('../src/foundation.mjs', import.meta.url), 'utf8');
-const runComponent = context => vm.runInNewContext(
-  moduleSource.replace(/^export default function connectComponent\(\) \{/u, '(function connectComponent() {').replace(/\n\}\s*$/u, '\n})()'),
-  context,
-  {timeout: 1000},
-);
+const backgroundSource = await readFile(new URL('../src/background.mjs', import.meta.url), 'utf8');
+const runComponent = context => {
+  const previousInput = globalThis.pluginInput;
+  const previousSdk = globalThis.hostSdkCall;
+  try {
+    globalThis.pluginInput = context.pluginInput;
+    globalThis.hostSdkCall = context.hostSdkCall;
+    return connectComponent();
+  } finally {
+    globalThis.pluginInput = previousInput;
+    globalThis.hostSdkCall = previousSdk;
+  }
+};
 
 test('declarative source configuration excludes keys and account credentials', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package/manifest.template.json', import.meta.url), 'utf8'));
@@ -24,10 +31,11 @@ test('declarative source configuration excludes keys and account credentials', a
 test('provider component owns a page-independent scheduled synchronization action', async () => {
   const source = await readFile(new URL('../src/foundation.mjs', import.meta.url), 'utf8');
   assert.ok(source.includes("invocation.action.startsWith('lifecycle.scheduled.sync.')"));
-  assert.ok(source.includes('hostSdkCall'));
-  assert.ok(source.includes("'subscriptions.get-content'"));
-  assert.ok(source.includes("'messages.list'"));
-  assert.ok(source.includes("'subscription_apply'"));
+  assert.ok(source.includes("import {scheduledSync} from './background.mjs'"));
+  assert.ok(backgroundSource.includes('hostSdkCall'));
+  assert.ok(backgroundSource.includes("'subscriptions.get-content'"));
+  assert.ok(backgroundSource.includes("'messages.list'"));
+  assert.ok(backgroundSource.includes("'subscription_apply'"));
   const result = runComponent({
     hostSdkCall: () => { throw new Error('scheduled action must not call the host before interactive setup'); },
     pluginInput: {

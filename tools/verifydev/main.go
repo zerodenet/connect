@@ -302,6 +302,10 @@ func verifySink(path, version string, key ed25519.PublicKey) error {
 			manifest.Runtime != "javascript-module-v1" || !bytes.Equal(hash(files[component.Entry]), decodeHex(manifest.SourceSHA256)) {
 			return errors.New("component identity or source digest differs")
 		}
+		if len(files["components/provider-source/background.mjs"]) == 0 ||
+			!bytes.Contains(files[component.Entry], []byte("from './background.mjs'")) {
+			return errors.New("scheduled synchronization module is missing")
+		}
 		for _, permission := range append(manifest.Required, manifest.Optional...) {
 			capabilities[permission.Capability] = true
 		}

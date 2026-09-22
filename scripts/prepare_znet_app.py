@@ -24,6 +24,7 @@ def stage(output: Path, version: str, registration_out: Path | None = None, publ
     component_root.mkdir(parents=True)
     (component_root / "manifest.json").write_text(json.dumps(component, ensure_ascii=False, indent=2) + "\n")
     (component_root / "index.mjs").write_bytes(source)
+    shutil.copy2(ROOT / "znet-sink/src/background.mjs", component_root / "background.mjs")
     ui_root = output / "ui/manage"
     ui_root.mkdir(parents=True)
     shutil.copy2(ROOT / "znet-sink/ui/management.html", ui_root / "index.html")

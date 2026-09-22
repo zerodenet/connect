@@ -28,7 +28,8 @@ python3 "$repo_root/scripts/prepare_znet_app.py" \
   --out "$accept_root/app" --version "$version" \
   --registration-out "$accept_root/registration.json" --public-key "$public_key"
 cargo build --manifest-path "$manifest_path" -p znet-plugin-sandbox --bin znet-plugin --locked
-"$gui_root/src-tauri/target/debug/znet-plugin" pack \
+plugin_target=${CARGO_TARGET_DIR:-"$gui_root/src-tauri/target"}
+"$plugin_target/debug/znet-plugin" pack \
   "$accept_root/app" "$repo_root/.local/publisher.seed" \
   "$accept_root/connect.zspkg" "$accept_root/release.json" "$accept_root/registration.json"
 

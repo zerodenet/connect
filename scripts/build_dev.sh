@@ -70,7 +70,8 @@ package_zboard darwin-arm64
 package_zboard windows-amd64
 
 cargo build --manifest-path "$gui_manifest" -p znet-plugin-sandbox --bin znet-plugin --locked
-"$gui_root/src-tauri/target/debug/znet-plugin" pack \
+plugin_target=${CARGO_TARGET_DIR:-"$gui_root/src-tauri/target"}
+"$plugin_target/debug/znet-plugin" pack \
   "$repo_root/.build/znet-sink" \
   "$repo_root/.local/publisher.seed" \
   "$sink_package" \

@@ -31,6 +31,7 @@ assert sink["source_sha256"] == "0" * 64
 assert sink["runtime"] == "javascript-module-v1"
 assert sink_app["plugin_id"] == sink["plugin_id"]
 assert sink_app["components"][0]["entry"] == "components/provider-source/index.mjs"
+assert (ROOT / "znet-sink/src/background.mjs").is_file()
 assert sink_app["pages"][0]["scripts"] == ["ui/manage/page.js"]
 assert zboard["files"] == {}
 assert {Path(item["path"]).suffix for item in release["artifacts"]} == {".zbplugin", ".zspkg"}
