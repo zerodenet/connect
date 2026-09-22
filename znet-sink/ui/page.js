@@ -58,6 +58,7 @@
 
       function connectFailure(error) {
         const code = error?.connectCode || error?.code;
+        const staged = detail => error?.connectStage ? `${error.connectStage}失败：${detail}` : detail;
         const protocolErrors = {
           invalid_credentials: '账号或密码不正确；请确认使用的是当前 ZBoard 账号。',
           reauthorization_required: '设备会话已过期，需要重新输入账号和密码授权。',
@@ -72,15 +73,23 @@
           return '来源已保存，但 ZBoard 尚未启用 Connect。请在 ZBoard 的“客户端通信”设置中启用后重试。';
         }
         if (code === 'permission_denied') {
-          return 'Connect 尚未获得客户端所需权限。请打开上方“权限”页，确认必需权限后启用。';
+          return staged('Connect 尚未获得客户端所需权限。请打开上方“权限”页，确认必需权限后启用。');
         }
         if (code === 'transport') {
-          return '来源已保存，但当前无法连接该服务。请检查网络、证书或连接方式后重试。';
+          return staged('当前无法连接该服务。请检查网络、证书或连接方式后重试。');
         }
         if (/subscription response must be base64 encoded/u.test(error?.message || '')) {
           return `客户端未能解析服务返回的订阅内容，关联尚未完成。技术信息：${error.message}`;
         }
-        return error?.message || '无法验证服务';
+        return staged(error?.message || '无法验证服务');
+      }
+
+      async function atStage(stage, task) {
+        try { return await task(); }
+        catch (error) {
+          if (error && !error.connectStage) error.connectStage = stage;
+          throw error;
+        }
       }
 
       function showView(id) {
@@ -270,13 +279,17 @@
       async function configuredRequest(path, options = {}) {
         if (!activeSource) throw new Error('请先选择来源。');
         const origin = activeSource.origin;
-        const response = await sdk('network.configured.request', 'provider_origins', 'configured_request', {
-          url: new URL(path, `${origin}/`).href,
-          method: options.method || 'GET',
-          headers: options.headers || {},
-          ...(options.body == null ? {} : {body: options.body}),
-          route: activeSource.network_path || 'direct',
-        });
+        const route = activeSource.network_path || 'direct';
+        const response = await atStage(
+          `${options.method === 'POST' ? '提交加密请求' : '读取服务能力'}（${route === 'core' ? '通过代理内核' : '直接连接'}）`,
+          () => sdk('network.configured.request', 'provider_origins', 'configured_request', {
+            url: new URL(path, `${origin}/`).href,
+            method: options.method || 'GET',
+            headers: options.headers || {},
+            ...(options.body == null ? {} : {body: options.body}),
+            route,
+          }),
+        );
         let body;
         try { body = JSON.parse(response.body); }
         catch { throw new Error(`服务返回了无法识别的响应（HTTP ${response.status}）。`); }
@@ -345,9 +358,9 @@
       }
 
       async function loadCapabilities() {
-        providerCapabilities = await verifyCapabilities(
-          await configuredRequest('/.well-known/zerodenet-connect/v1/capabilities')
-        );
+        providerCapabilities = await atStage('验证服务身份', async () => verifyCapabilities(
+          await configuredRequest('/.well-known/zerodenet-connect/v1/capabilities'),
+        ));
         return providerCapabilities;
       }
 
@@ -364,8 +377,8 @@
 
       async function exchange(operation, authorization, body) {
         const capabilities = providerCapabilities || await loadCapabilities();
-        const identity = await deviceIdentity();
-        const responseKey = await sdk('crypto.device.use', 'self', 'crypto_hpke_key_generate');
+        const identity = await atStage('准备设备身份', deviceIdentity);
+        const responseKey = await atStage('生成会话密钥', () => sdk('crypto.device.use', 'self', 'crypto_hpke_key_generate'));
         const requestId = base64Url(randomBytes(16));
         const issuedAt = Math.floor(Date.now() / 1000);
         const bodyRaw = JSON.stringify(body);
@@ -389,11 +402,11 @@
         const keyId = capabilities.provider_key_statement.key_id;
         const requestInfo = textEncoder.encode(`zerodenet-connect/v1/request/${keyId}`);
         const requestAad = textEncoder.encode(`zerodenet-connect/v1/request\0${keyId}\0${requestId}`);
-        const sealed = await sdk('crypto.device.use', 'self', 'crypto_hpke_seal', {
+        const sealed = await atStage('加密请求', () => sdk('crypto.device.use', 'self', 'crypto_hpke_seal', {
           recipientPublicKeyBase64: standardBase64(fromBase64Url(capabilities.provider_key_statement.hpke_public_key)),
           infoBase64: standardBase64(requestInfo), aadBase64: standardBase64(requestAad),
           plaintextBase64: utf8Base64(JSON.stringify(message)),
-        });
+        }));
         const envelope = {
           protocol_version: 1, suite: 'HPKE-0x0020-0x0001-0x0003', key_id: keyId, request_id: requestId,
           encapsulation: base64Url(fromStandardBase64(sealed.encapsulationBase64)),
@@ -408,13 +421,13 @@
         }
         const responseInfo = textEncoder.encode(`zerodenet-connect/v1/response/${keyId}`);
         const responseAad = textEncoder.encode(`zerodenet-connect/v1/response\0${keyId}\0${requestId}`);
-        const opened = await sdk('crypto.device.use', 'self', 'crypto_hpke_open', {
+        const opened = await atStage('解密服务响应', () => sdk('crypto.device.use', 'self', 'crypto_hpke_open', {
           privateKeyHandle: responseKey.privateKeyHandle,
           senderPublicKeyBase64: standardBase64(fromBase64Url(capabilities.provider_key_statement.hpke_public_key)),
           infoBase64: standardBase64(responseInfo), aadBase64: standardBase64(responseAad),
           encapsulationBase64: standardBase64(fromBase64Url(responseEnvelope.encapsulation)),
           ciphertextBase64: standardBase64(fromBase64Url(responseEnvelope.ciphertext)),
-        });
+        }));
         const response = JSON.parse(textDecoder.decode(fromStandardBase64(opened.plaintextBase64)));
         const responseNow = Math.floor(Date.now() / 1000);
         if (response.protocol_version !== 1 || response.operation !== operation || response.request_id !== requestId ||
@@ -433,15 +446,32 @@
       }
 
       async function saveSession(result) {
-        await Promise.all([
-          secretPut(sourceSecretKey('session/access'), result.access_credential),
-          secretPut(sourceSecretKey('session/renewal'), result.renewal_credential),
-          sourceStatePut('session/metadata', {
+        if (!result?.access_credential || !result?.renewal_credential ||
+            !Number.isFinite(result.access_expires_at) || !Number.isFinite(result.renewal_expires_at)) {
+          throw new Error('服务返回的设备会话不完整。');
+        }
+        try {
+          await secretPut(sourceSecretKey('session/access'), result.access_credential);
+          await secretPut(sourceSecretKey('session/renewal'), result.renewal_credential);
+          await sourceStatePut('session/metadata', {
             user_id: result.user_id, device_id: result.device_id,
             access_expires_at: result.access_expires_at, renewal_expires_at: result.renewal_expires_at,
-          }),
-        ]);
-        await ensureScheduledSync();
+          });
+        } catch (error) {
+          const rollback = await Promise.allSettled([
+            secretDelete(sourceSecretKey('session/access')),
+            secretDelete(sourceSecretKey('session/renewal')),
+            znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
+          ]);
+          const failed = rollback.some(item => item.status === 'rejected');
+          const failure = new Error(failed
+            ? '客户端写入会话状态失败，清理结果也未能确认。请不要继续关联订阅。'
+            : `客户端写入会话状态失败，已清除本次凭据；可以重试授权。${error?.message || ''}`);
+          failure.connectStage = '保存设备会话';
+          throw failure;
+        }
+        try { await ensureScheduledSync(); return null; }
+        catch (error) { return `后台同步尚未启用：${connectFailure(error)}`; }
       }
 
       async function accessAuthorization() {
@@ -640,12 +670,20 @@
         if (action === 'status.get' || action === 'diagnostics.run') return currentStatus();
         if (action === 'authorization.password') {
           await loadCapabilities();
-          const result = await exchange('authorization.password', {kind:'password', credential:payload.password}, {
+          const result = await atStage('授权设备', () => exchange('authorization.password', {kind:'password', credential:payload.password}, {
             account: payload.account, device_name: `ZNet Sink · ${navigator.platform || '本机'}`,
-          });
-          await saveSession(result);
-          await listSubscriptions();
-          return {ok:true, message:'设备授权成功，请选择订阅。'};
+          }));
+          const syncWarning = await saveSession(result);
+          let subscriptionWarning = null;
+          try { await atStage('读取订阅清单', listSubscriptions); }
+          catch (error) { subscriptionWarning = connectFailure(error); }
+          const warnings = [syncWarning, subscriptionWarning].filter(Boolean);
+          return {
+            ok:true,
+            message: warnings.length
+              ? `设备已授权，但${warnings.join('；')}。可在下一步重试，不需要重新输入密码。`
+              : '设备授权成功，请选择订阅。',
+          };
         }
         throw new Error('当前 Connect 版本不支持此操作。');
       }
@@ -686,8 +724,9 @@
           return value;
         }
         if (value?.phase === 'needs-subscription') {
-          try { await listSubscriptions(); showView('subscriptions'); }
-          catch (error) { notice(error.message || '无法读取订阅', 'error'); showView('account'); }
+          showView('subscriptions');
+          try { await atStage('读取订阅清单', listSubscriptions); }
+          catch (error) { notice(`${connectFailure(error)}；可直接重试，无需重新授权。`, 'error'); }
         } else if (value?.source) {
           showView('service');
         } else {
@@ -770,6 +809,11 @@
       byId('backServiceSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
       byId('backService').addEventListener('click', () => showView('service'));
       byId('backAccount').addEventListener('click', () => showView('account'));
+      byId('retrySubscriptions').addEventListener('click', () => runRequest('retrySubscriptions', async () => {
+        notice('');
+        try { await atStage('读取订阅清单', listSubscriptions); }
+        catch (error) { notice(connectFailure(error), 'error'); }
+      }));
       byId('manageSource').addEventListener('click', () => showView('source'));
       byId('backSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
       byId('backCompleteSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });

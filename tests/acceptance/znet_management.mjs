@@ -54,6 +54,8 @@ try {
     let lastRequest = null;
     let messageRead = false;
     let failNextStateWrite = false;
+    let failNextSessionStateWrite = false;
+    let failNextSubscriptionList = false;
     let communicationEnabled = true;
     const bytes = (length, fill) => new Uint8Array(length).fill(fill);
     const standardBase64 = input => {
@@ -110,6 +112,10 @@ try {
           return {status: 200, headers: {'content-type': 'application/json'}, body: JSON.stringify(value.capabilities)};
         }
         if (args.url !== `${value.origin}/.well-known/zerodenet-connect/v1/exchange`) throw new Error(`unexpected URL ${args.url}`);
+        if (lastRequest?.operation === 'subscriptions.list' && failNextSubscriptionList) {
+          failNextSubscriptionList = false;
+          throw new Error('fixture network request failed');
+        }
         const envelope = JSON.parse(args.body);
         if (!lastRequest || envelope.request_id !== lastRequest.request_id) throw new Error('request correlation mismatch');
         return {status: 200, headers: {'content-type': 'application/json'}, body: JSON.stringify({
@@ -164,6 +170,10 @@ try {
             failNextStateWrite = false;
             throw new Error('fixture state write failed');
           }
+          if (key.endsWith('/session/metadata') && failNextSessionStateWrite) {
+            failNextSessionStateWrite = false;
+            throw new Error('fixture session state write failed');
+          }
           state.set(key, structuredClone(next)); return true;
         },
         delete: async (_component, _area, key) => state.delete(key),
@@ -178,6 +188,8 @@ try {
       messageRead,
     });
     globalThis.__connectAcceptanceFailNextStateWrite = () => { failNextStateWrite = true; };
+    globalThis.__connectAcceptanceFailNextSessionStateWrite = () => { failNextSessionStateWrite = true; };
+    globalThis.__connectAcceptanceFailNextSubscriptionList = () => { failNextSubscriptionList = true; };
     globalThis.__connectAcceptanceSetCommunication = enabled => { communicationEnabled = enabled; };
   }, fixture);
 
@@ -192,8 +204,6 @@ try {
   await page.locator('#networkPath').click();
   await page.locator('[data-znet-select-option][data-value="core"]').click();
   assert.equal(await page.locator('#networkPathValue').textContent(), '通过代理内核');
-  await page.locator('#networkPath').click();
-  await page.locator('[data-znet-select-option][data-value="direct"]').click();
   await page.evaluate(() => globalThis.__connectAcceptanceFailNextStateWrite());
   await page.locator('#save').click();
   await page.locator('#notice').getByText('来源未保存，已恢复先前配置', {exact: false}).waitFor();
@@ -207,9 +217,24 @@ try {
   await page.locator('#continueAccount').click();
   await page.locator('#account').fill('user@example.com');
   await page.locator('#password').fill('correct horse');
+  await page.evaluate(() => globalThis.__connectAcceptanceFailNextSessionStateWrite());
+  await page.locator('#login').click();
+  await page.locator('#notice').getByText('保存设备会话失败', {exact: false}).waitFor();
+  const partialSession = await page.evaluate(() => globalThis.__connectAcceptanceSnapshot());
+  const pendingSource = partialSession.state['sources/index'][0];
+  assert.equal(partialSession.state[`source/${pendingSource.id}/session/metadata`], undefined);
+  assert.equal(partialSession.secrets[`source/${pendingSource.id}/session/access`], undefined);
+  assert.equal(partialSession.secrets[`source/${pendingSource.id}/session/renewal`], undefined);
+  assert.equal(await page.locator('#view-account').isVisible(), true);
+  await page.locator('#password').fill('correct horse');
+  await page.evaluate(() => globalThis.__connectAcceptanceFailNextSubscriptionList());
   await page.locator('#login').click();
   await page.locator('#view-subscriptions').waitFor({state: 'visible'});
   assert.equal(await page.locator('#password').inputValue(), '');
+  assert.match(await page.locator('#notice').textContent(), /设备已授权.*提交加密请求.*通过代理内核/u);
+  const authorized = await page.evaluate(() => globalThis.__connectAcceptanceSnapshot());
+  assert.ok(authorized.state[`source/${pendingSource.id}/session/metadata`]);
+  await page.locator('#retrySubscriptions').click();
   assert.match(await page.locator('#subscriptionList').textContent(), /Pro/u);
   await page.locator('#bindSubscription').click();
   await page.locator('#view-complete').waitFor({state: 'visible'});
@@ -229,7 +254,9 @@ try {
   const snapshot = await page.evaluate(() => globalThis.__connectAcceptanceSnapshot());
   assert.deepEqual(JSON.parse(snapshot.configuration.provider_origins), [origin]);
   const source = snapshot.state['sources/index'][0];
-  assert.equal(source.network_path, 'direct');
+  assert.equal(source.network_path, 'core');
+  assert.ok(snapshot.calls.some(call => call.method === 'configured_request' &&
+    call.args.url.endsWith('/exchange') && call.args.route === 'core'));
   assert.equal(snapshot.state[`source/${source.id}/subscription/binding`].id, 'connect:panel-example:7');
   assert.equal(snapshot.state[`source/${source.id}/messages/summary`].items[0].message_id, '9');
   assert.equal(snapshot.messageRead, true);
