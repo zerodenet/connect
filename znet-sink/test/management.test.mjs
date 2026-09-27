@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const html = await readFile(new URL('../ui/management.html', import.meta.url), 'utf8');
 const script = await readFile(new URL('../ui/page.js', import.meta.url), 'utf8');
+const style = await readFile(new URL('../ui/style.css', import.meta.url), 'utf8');
 
 test('management page follows the host settings standard and exposes a progressive workflow', () => {
   for (const marker of ['添加来源', '保存并检查', '确认服务', '授权此设备', '选择订阅', '立即同步', '服务消息', '移除来源', '技术诊断']) {
@@ -26,14 +27,18 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(script.includes("network.configured.request"));
   assert.ok(script.includes("crypto_hpke_seal"));
   assert.ok(script.includes("subscription_apply"));
+  assert.ok(script.includes("subscription_metadata_update"));
   assert.ok(script.includes("authorization.password"));
   assert.ok(script.includes("messages.get"));
   assert.ok(script.includes("messages.mark-read"));
   assert.ok(script.includes("requiredOperations"));
   assert.ok(script.includes("90 * 24 * 60 * 60"));
   assert.ok(script.includes("response.expires_at - response.issued_at > 120"));
-  assert.ok(script.includes('taskId: sourceTaskId(activeSource)'));
-  assert.ok(script.includes("intervalSeconds: 900"));
+  assert.ok(script.includes('sourceTasks(activeSource)'));
+  assert.ok(script.includes('connect-usage-${source.id}'));
+  assert.ok(script.includes('connect-messages-${source.id}'));
+  assert.ok(script.includes("'schedule_list'"));
+  assert.ok(script.includes('sync_interval_seconds: syncIntervalSeconds'));
   assert.ok(script.includes("znetPlugin.navigation?.initial?.()"));
   assert.ok(script.includes("route: `messages.${activeSource.id}`"));
   assert.ok(script.includes("'subscription_remove'"));
@@ -46,6 +51,11 @@ test('management page follows the host settings standard and exposes a progressi
   assert.ok(script.includes("actions.setAttribute('data-znet-actions', '')"));
   assert.ok(script.includes("open.setAttribute('data-variant', 'outline')"));
   assert.ok(script.includes("open.textContent = '管理来源'"));
+  assert.ok(html.includes('id="messageDialog"'));
+  assert.ok(html.includes('id="syncIntervals"'));
+  assert.ok(script.includes('removeSourceRecord(source)'));
+  assert.ok(style.includes('var(--card)'));
+  assert.equal(/#[0-9a-f]{3,8}\b/i.test(style), false);
 });
 
 test('management page does not poll, bypass the host, or persist account secrets', () => {

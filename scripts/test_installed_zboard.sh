@@ -61,9 +61,11 @@ acceptance_test="$repo_root/tests/acceptance/zboard_installed_host_test.go"
 printf '{"Replace":{"%s":"%s"}}\n' "$logical_test" "$acceptance_test" > "$accept_root/overlay.json"
 
 publisher_public_key=$(tr -d '\r\n' < "$accept_root/publisher.key.pub")
+package_under_test=${CONNECT_ZBOARD_PACKAGE:-"$accept_root/connect.zbplugin"}
+test -f "$package_under_test"
 (
   cd "$backend_root"
-  CONNECT_ZBOARD_PACKAGE="$accept_root/connect.zbplugin" \
+  CONNECT_ZBOARD_PACKAGE="$package_under_test" \
   CONNECT_PUBLISHER_PUBLIC_KEY="$publisher_public_key" \
     go test -mod=mod \
       -modfile="$accept_root/zboard-acceptance.mod" \
@@ -75,4 +77,4 @@ publisher_public_key=$(tr -d '\r\n' < "$accept_root/publisher.key.pub")
       -v
 )
 
-printf 'ZBoard installed-package acceptance passed for %s (%s).\n' "$version" "$platform"
+printf 'ZBoard installed-package acceptance passed for %s (%s).\n' "$package_under_test" "$platform"

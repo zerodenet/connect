@@ -43,6 +43,10 @@
       "scope": "self"
     },
     {
+      "capability": "plugin.logs.write",
+      "scope": "self"
+    },
+    {
       "capability": "tasks.schedule",
       "scope": "self"
     }

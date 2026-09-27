@@ -168,7 +168,7 @@ func verifyZBoard(path, version string, key ed25519.PublicKey) (string, error) {
 	if manifest.ID != "org.zerodenet.connect.zboard" || manifest.Version != version {
 		return "", errors.New("package identity or version differs")
 	}
-	if strings.Join(manifest.Capabilities, ",") != "zboard.ui.page.v1,zboard.config.v1,zboard.storage.v1,zboard.http.route.v1,zboard.account.assertion.v1,zboard.subscription.projection.v1,zboard.message.projection.v1" {
+	if strings.Join(manifest.Capabilities, ",") != "zboard.ui.page.v1,zboard.config.v1,zboard.storage.v1,zboard.http.route.v1,zboard.account.assertion.v1,zboard.account.self.read.v1,zboard.subscription.projection.v1,zboard.subscription.read.v1,zboard.message.projection.v1" {
 		return "", errors.New("ZBoard package does not declare the complete Connect host capability set")
 	}
 	if len(manifest.Surfaces) != 2 || manifest.Surfaces[0] != "account" || manifest.Surfaces[1] != "admin" {

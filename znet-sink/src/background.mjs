@@ -1,4 +1,4 @@
-export function scheduledSync(sourceId, context) {
+export function scheduledSync(sourceId, kind, context) {
   const {sources, state, invocation, sourceStateKey, parseStoredValue, envelope, base64, utf8, unbase64, decodeUtf8, hostSdkCall} = context;
   // A host-owned scheduled invocation runs without a page and uses only the
   // same declared, authorized SDK bridge as the interactive component.
@@ -50,6 +50,28 @@ export function scheduledSync(sourceId, context) {
       }
       return reply.value;
     };
+    const log = (level, message, fields = {}) => {
+      try {
+        const safeFields = {...fields};
+        if (safeFields.code && (typeof safeFields.code !== 'string' || safeFields.code.length > 64 ||
+          ![...safeFields.code].every(character =>
+            (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character === '_'))) {
+          safeFields.code = 'unclassified';
+        }
+        sdk('plugin.logs.write', 'self', 'log_write', {
+          level, message, fields: {task: kind, sourceId, ...safeFields},
+        }, 4096);
+      } catch { /* A log write must not change the scheduled task result. */ }
+    };
+    const notify = (argumentsValue) => {
+      try {
+        sdk('notifications.post', 'self', 'notification_post', argumentsValue, 65536);
+      } catch (error) {
+        // Notification permission or OS delivery must not roll back message
+        // state, subscription work, or authorization cleanup.
+        log('warn', 'Connect 后台通知未送达', {code: error?.code || 'notification_failed'});
+      }
+    };
     const source = sources.find((candidate) => candidate.id === sourceId);
     if (!source) return envelope({ok: true, skipped: true, reason: 'source_removed'});
     const sourceKey = (suffix) => sourceStateKey(source, suffix);
@@ -71,7 +93,8 @@ export function scheduledSync(sourceId, context) {
     const identity = parseState('device/identity');
     const metadata = parseState('session/metadata');
     const binding = parseState('subscription/binding');
-    if (!identity || !metadata || !binding?.remote_subscription_id) {
+    const appliedRevision = parseState('subscription/applied_revision');
+    if (!identity || !metadata || (kind !== 'messages' && !binding?.remote_subscription_id)) {
       return envelope({ok: true, skipped: true, reason: 'interactive_setup_required'}, updates);
     }
     const request = (path, options = {}) => {
@@ -206,43 +229,124 @@ export function scheduledSync(sourceId, context) {
       cachedAuthorization = {kind: 'access', credential: renewed.access_credential};
       return cachedAuthorization;
     };
-    try {
-      const projected = exchange('subscriptions.get-content', authorization(), {
-        subscription_id: binding.remote_subscription_id, known_revision: binding.revision || null,
-      });
-      let changed = false;
-      if (projected.not_modified !== true) {
-        if (typeof projected.content !== 'string' || !projected.content) throw new Error('Connect 订阅内容为空。');
-        const profile = sdk('subscriptions.manage', 'self', 'subscription_apply', {
-          providerId: capabilities.provider_id, remoteSubscriptionId: binding.remote_subscription_id,
-          sourceName: source.name, subscriptionName: projected.display_name || binding.name,
-          content: projected.content, format: projected.format, revision: projected.revision,
+    const refreshUsage = () => {
+      if (!capabilities.operations.includes('subscriptions.usage')) {
+        setState('subscription/usage_error', {
+          message: '此服务尚未开放订阅用量能力，客户端暂时无法显示流量和到期时间。请在服务端启用通用订阅用量能力后重试。',
+          checked_at: nowUnixMs,
         });
-        setState('subscription/binding', {id: profile.id, name: profile.name, remote_subscription_id: binding.remote_subscription_id, revision: projected.revision});
-        changed = true;
+        log('warn', 'Connect 后台用量同步缺少服务能力', {reason: 'provider_capability_unavailable'});
+        return false;
       }
+      try {
+        const usage = exchange('subscriptions.usage', authorization(), {
+          subscription_id: binding.remote_subscription_id,
+        });
+        const valid = usage.subscription_id === binding.remote_subscription_id &&
+          ['used_bytes', 'total_bytes', 'expire_at_unix_ms'].every(key => Number.isSafeInteger(usage[key]) && usage[key] >= 0) &&
+          usage.total_bytes > 0 && usage.expire_at_unix_ms > 0;
+        if (!valid) throw new Error('Connect 服务返回的订阅用量信息无效。');
+        sdk('subscriptions.manage', 'self', 'subscription_metadata_update', {
+          providerId: capabilities.provider_id, remoteSubscriptionId: binding.remote_subscription_id,
+          usage: {usedBytes: usage.used_bytes, totalBytes: usage.total_bytes, expireAtUnixMs: usage.expire_at_unix_ms},
+        });
+        setState('subscription/usage_checked_at', nowUnixMs);
+        setState('subscription/usage_error', null);
+        return true;
+      } catch (error) {
+        const message = error?.message === '插件宿主操作失败'
+          ? '当前客户端未提供托管订阅用量写入能力；请升级到包含 subscription_metadata_update 的版本。'
+          : error?.message || 'Connect 订阅用量更新失败。';
+        setState('subscription/usage_error', {message, checked_at: nowUnixMs});
+        log('warn', 'Connect 后台用量同步失败', {code: error?.connectCode || error?.code || 'usage_update_failed'});
+        return false;
+      }
+    };
+    try {
+      if (kind === 'subscription') {
+        // Upgrade old installations through their existing sync task; usage
+        // and messages must keep running even if content cannot be projected.
+        const intervalSeconds = source.sync_interval_seconds ?? 900;
+        if (intervalSeconds > 0) {
+          const tasks = sdk('tasks.schedule', 'self', 'schedule_list', {}, 65536);
+          for (const name of ['usage', 'messages']) {
+            const taskId = `connect-${name}-${source.id}`;
+            if (!tasks.some(task => task.taskId === taskId)) {
+              sdk('tasks.schedule', 'self', 'schedule_put', {
+                taskId, action: `${name}.${source.id}`, intervalSeconds,
+              }, 65536);
+            }
+          }
+        }
+      }
+      if (kind === 'usage') {
+        const updated = refreshUsage();
+        if (updated) log('info', 'Connect 后台用量同步完成');
+        return envelope({
+          ok: true, updated,
+          ...(!capabilities.operations.includes('subscriptions.usage') ? {reason: 'provider_capability_unavailable'} : {}),
+        }, updates);
+      }
+      if (kind === 'subscription') {
+        const knownRevision = appliedRevision?.remote_subscription_id === binding.remote_subscription_id &&
+          appliedRevision?.revision === binding.revision
+          ? appliedRevision.revision : null;
+        const projected = exchange('subscriptions.get-content', authorization(), {
+          subscription_id: binding.remote_subscription_id, known_revision: knownRevision,
+        });
+        let changed = false;
+        let usageUpdated = null;
+        if (projected.not_modified !== true) {
+          if (typeof projected.content !== 'string' || !projected.content) throw new Error('Connect 订阅内容为空。');
+          let content = projected.content;
+          if (projected.format === 'znet-sink' && content.trimStart().startsWith('{')) {
+            try { JSON.parse(content); }
+            catch { throw new Error('Connect 服务返回的 ZNet Sink 订阅不是有效 JSON。'); }
+            content = base64(utf8(content));
+          }
+          const profile = sdk('subscriptions.manage', 'self', 'subscription_apply', {
+            providerId: capabilities.provider_id, remoteSubscriptionId: binding.remote_subscription_id,
+            sourceName: source.name, subscriptionName: projected.display_name || binding.name,
+            content, format: projected.format, revision: projected.revision,
+          });
+          setState('subscription/binding', {id: profile.id, name: profile.name, remote_subscription_id: binding.remote_subscription_id, revision: projected.revision});
+          setState('subscription/applied_revision', {
+            remote_subscription_id: binding.remote_subscription_id,
+            revision: projected.revision,
+          });
+          // subscription_apply replaces quota metadata in the host. Restore it
+          // immediately, even when the separate usage task ran first.
+          usageUpdated = refreshUsage();
+          changed = true;
+        }
+        if (changed) log(usageUpdated ? 'info' : 'warn', 'Connect 后台订阅同步完成', {usageUpdated});
+        return envelope({ok: true, changed}, updates);
+      }
+      if (kind !== 'messages') throw new Error('Connect 后台任务类型无效。');
       const page = exchange('messages.list', authorization(), {cursor: null, limit: 20});
       const items = Array.isArray(page.messages) ? page.messages : [];
       const previous = parseState('messages/summary');
       const priorUnread = (previous?.items || []).filter((message) => message.read_at == null).map((message) => message.message_id);
       const unread = items.filter((message) => message.read_at == null);
       const fresh = unread.filter((message) => !priorUnread.includes(message.message_id));
-      if (fresh.length) sdk('notifications.post', 'self', 'notification_post', {
+      if (fresh.length) notify({
         kind: 'info', message: `Connect 有 ${fresh.length} 条新消息`, duration_ms: 5000,
         action: {pageId: 'manage', route: `messages.${source.id}`, reference: fresh[0]?.message_id},
-      }, 65536);
+      });
       setState('messages/summary', {checked_at: nowUnixMs, unread: unread.length, items});
-      return envelope({ok: true, changed, unread: unread.length}, updates);
+      if (fresh.length) log('info', 'Connect 后台发现新消息', {newCount: fresh.length});
+      return envelope({ok: true, unread: unread.length}, updates);
     } catch (error) {
       if (['communication_disabled', 'reauthorization_required', 'authorization_revoked', 'replay_rejected', 'unauthorized'].includes(error.connectCode)) {
         secretDelete(sourceKey('session/access'));
         secretDelete(sourceKey('session/renewal'));
         updates[sourceKey('session/metadata')] = null;
-        sdk('notifications.post', 'self', 'notification_post', {
+        notify({
           kind: 'warning', message: 'Connect 授权已失效，请重新登录。', duration_ms: 8000,
           action: {pageId: 'manage', route: `authorization.${source.id}`},
-        }, 65536);
+        });
       }
+      log('error', 'Connect 后台同步失败', {code: error?.connectCode || error?.code || 'task_failed'});
       return envelope({ok: false, retryable: !error.connectCode, message: error.message || 'Connect 后台同步失败。'}, updates);
     }
   }

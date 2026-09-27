@@ -66,6 +66,12 @@
       "response_sensitivity": "private"
     },
     {
+      "id": "account.me",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "private"
+    },
+    {
       "id": "subscriptions.list",
       "session": "access",
       "idempotency": "safe",
@@ -76,6 +82,12 @@
       "session": "access",
       "idempotency": "safe",
       "response_sensitivity": "secret"
+    },
+    {
+      "id": "subscriptions.usage",
+      "session": "access",
+      "idempotency": "safe",
+      "response_sensitivity": "private"
     },
     {
       "id": "messages.list",

@@ -60,7 +60,10 @@ func (*memoryStorage) Close() {}
 type fakeHost struct {
 	mu           sync.Mutex
 	accountCalls int
+	usageReads   int
 }
+
+const testPrincipalID = "p1.NDI.signed-for-connect"
 
 func (*fakeHost) Close() {}
 
@@ -75,12 +78,25 @@ func (host *fakeHost) Call(_ context.Context, capability, operation string, payl
 		if request.Account != "user@example.com" || request.Password != "correct horse" {
 			return &pluginv1.HostCallError{Code: "invalid_credentials"}
 		}
-		value = pluginv1.Principal{ID: "42", Display: "User", Admin: true}
+		value = pluginv1.Principal{ID: testPrincipalID, Display: "User", Admin: true}
+	case accountSelfReadCapability + "/account.self.get":
+		request := payload.(map[string]any)
+		if request["principal_id"] != testPrincipalID {
+			return &pluginv1.HostCallError{Code: "forbidden"}
+		}
+		value = map[string]any{"email": "user@example.com"}
 	case pluginv1.SubscriptionProjectionCapability + "/subscriptions.list":
 		value = []pluginv1.ProjectedSubscription{{ID: "7", DisplayName: "Pro", Format: subscriptionFormat, Revision: "r1", ContentSHA256: "abc", UpdatedAt: 1}}
 	case pluginv1.SubscriptionProjectionCapability + "/subscriptions.get":
 		request := payload.(pluginv1.SubscriptionContentRequest)
-		value = pluginv1.ProjectedSubscription{ID: request.SubscriptionID, DisplayName: "Pro", Format: request.Format, Revision: "r1", ContentSHA256: "abc", UpdatedAt: 1, Content: `{"version":1}`}
+		value = pluginv1.ProjectedSubscription{ID: request.SubscriptionID, DisplayName: "Pro", Format: request.Format, Revision: "r1", ContentSHA256: "abc", UpdatedAt: 1, Content: `{"version":1}`, NotModified: request.KnownRevision == "r1"}
+	case subscriptionReadCapability + "/subscriptions.owned.get":
+		request := payload.(map[string]any)
+		host.usageReads++
+		if request["principal_id"] != testPrincipalID || request["id"] != uint64(7) {
+			return &pluginv1.HostCallError{Code: "forbidden"}
+		}
+		value = map[string]any{"id": 7, "flow_used": 375, "flow_total": 1000, "end_at": time.UnixMilli(1800000000000).UTC()}
 	case pluginv1.MessageProjectionCapability + "/messages.list":
 		value = pluginv1.MessagePage{Items: []pluginv1.ProjectedMessage{{ID: "9", Title: "Notice", Severity: "info", Revision: 3, PublishedAt: 2}}, NextCursor: "8"}
 	case pluginv1.MessageProjectionCapability + "/messages.get":
@@ -130,9 +146,13 @@ func TestProviderRuntimeAuthorizationProjectionRenewalAndReplay(t *testing.T) {
 	var discovery struct {
 		ProviderKey       protocolv1.ProviderKeyStatement `json:"provider_key_statement"`
 		IdentityPublicKey string                          `json:"identity_public_key"`
+		Operations        []string                        `json:"operations"`
 	}
 	if err := json.Unmarshal(discoveryResponse.Body, &discovery); err != nil {
 		t.Fatal(err)
+	}
+	if !containsOperation(discovery.Operations, "subscriptions.usage") {
+		t.Fatal("usage extension missing from declared provider operations")
 	}
 	identityPublic, _ := base64.RawURLEncoding.DecodeString(discovery.IdentityPublicKey)
 	if err := discovery.ProviderKey.Verify(ed25519.PublicKey(identityPublic), time.Now()); err != nil {
@@ -149,18 +169,30 @@ func TestProviderRuntimeAuthorizationProjectionRenewalAndReplay(t *testing.T) {
 		t.Fatalf("password response: %#v", password)
 	}
 	var credentials struct {
+		UserID  string `json:"user_id"`
 		Access  string `json:"access_credential"`
 		Renewal string `json:"renewal_credential"`
 	}
 	if err := json.Unmarshal(password.Body, &credentials); err != nil {
 		t.Fatal(err)
 	}
-	if credentials.Access == "" || credentials.Renewal == "" {
+	if credentials.UserID != testPrincipalID || credentials.Access == "" || credentials.Renewal == "" {
 		t.Fatal("missing credentials")
 	}
 	replayedRaw := callHTTP(t, runtime, passwordCall)
 	if !bytes.Equal(passwordRaw, replayedRaw) || host.accountCalls != 1 {
 		t.Fatal("password replay did not return the exact cached response")
+	}
+	accountCall := client.seal(t, "account.me", protocolv1.Authorization{Kind: "access", Credential: credentials.Access}, map[string]any{})
+	account := openCall(t, client, accountCall, callHTTP(t, runtime, accountCall))
+	if account.Status != "ok" || !bytes.Contains(account.Body, []byte(`"email":"user@example.com"`)) {
+		t.Fatalf("account profile: %#v", account)
+	}
+	var profile struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.Unmarshal(account.Body, &profile); err != nil || profile.UserID != credentials.UserID {
+		t.Fatalf("account profile identity differs from authorization: %+v, %v", profile, err)
 	}
 
 	listCall := client.seal(t, "subscriptions.list", protocolv1.Authorization{Kind: "access", Credential: credentials.Access}, map[string]any{})
@@ -176,6 +208,24 @@ func TestProviderRuntimeAuthorizationProjectionRenewalAndReplay(t *testing.T) {
 	content := openCall(t, client, contentCall, callHTTP(t, runtime, contentCall))
 	if content.Status != "ok" || !bytes.Contains(content.Body, []byte(`"subscription_id":"7"`)) || !bytes.Contains(content.Body, []byte(`"content"`)) {
 		t.Fatalf("subscription content: %#v", content)
+	}
+	unchangedCall := client.seal(t, "subscriptions.get-content", protocolv1.Authorization{Kind: "access", Credential: credentials.Access}, map[string]any{"subscription_id": "7", "known_revision": "r1"})
+	unchanged := openCall(t, client, unchangedCall, callHTTP(t, runtime, unchangedCall))
+	if unchanged.Status != "ok" || !bytes.Contains(unchanged.Body, []byte(`"not_modified":true`)) {
+		t.Fatalf("unchanged subscription: %#v", unchanged)
+	}
+	usageCall := client.seal(t, "subscriptions.usage", protocolv1.Authorization{Kind: "access", Credential: credentials.Access}, map[string]any{"subscription_id": "7"})
+	usage := openCall(t, client, usageCall, callHTTP(t, runtime, usageCall))
+	if usage.Status != "ok" || !bytes.Contains(usage.Body, []byte(`"used_bytes":375`)) || !bytes.Contains(usage.Body, []byte(`"total_bytes":1000`)) || !bytes.Contains(usage.Body, []byte(`"expire_at_unix_ms":1800000000000`)) {
+		t.Fatalf("subscription usage after unchanged content: %#v", usage)
+	}
+	if host.usageReads != 1 {
+		t.Fatalf("expected one account-scoped usage read, got %d", host.usageReads)
+	}
+	foreignUsageCall := client.seal(t, "subscriptions.usage", protocolv1.Authorization{Kind: "access", Credential: credentials.Access}, map[string]any{"subscription_id": "8"})
+	foreignUsage := openCall(t, client, foreignUsageCall, callHTTP(t, runtime, foreignUsageCall))
+	if foreignUsage.Status != "error" || foreignUsage.Error == nil || foreignUsage.Error.Code != "not_found" {
+		t.Fatalf("foreign subscription should be indistinguishable from missing: %#v", foreignUsage)
 	}
 	messageListCall := client.seal(t, "messages.list", protocolv1.Authorization{Kind: "access", Credential: credentials.Access}, map[string]any{"cursor": nil, "limit": 20})
 	messageList := openCall(t, client, messageListCall, callHTTP(t, runtime, messageListCall))
@@ -200,9 +250,10 @@ func TestProviderRuntimeAuthorizationProjectionRenewalAndReplay(t *testing.T) {
 		t.Fatalf("renew response: %#v", renew)
 	}
 	var renewed struct {
+		UserID string `json:"user_id"`
 		Access string `json:"access_credential"`
 	}
-	if err := json.Unmarshal(renew.Body, &renewed); err != nil || renewed.Access == "" {
+	if err := json.Unmarshal(renew.Body, &renewed); err != nil || renewed.UserID != credentials.UserID || renewed.Access == "" {
 		t.Fatalf("renewed credentials: %v %#v", err, renewed)
 	}
 	if !bytes.Equal(renewRaw, callHTTP(t, runtime, renewCall)) {
@@ -215,13 +266,13 @@ func TestProviderRuntimeAuthorizationProjectionRenewalAndReplay(t *testing.T) {
 		t.Fatalf("old renewal credential was accepted: %#v", oldRenewal)
 	}
 	page, err := runtime.HandlePageAction(context.Background(), &pluginv1.PageActionRequest{
-		PageId: "authorized-devices", Surface: "account", ActorId: "42", Action: "devices.list", PayloadJson: []byte(`{}`),
+		PageId: "authorized-devices", Surface: "account", ActorId: credentials.UserID, Action: "devices.list", PayloadJson: []byte(`{}`),
 	})
 	if err != nil || !bytes.Contains(page.ResultJson, []byte(`"device_id":"device-1"`)) {
 		t.Fatalf("page device list: %v %s", err, page.ResultJson)
 	}
 	page, err = runtime.HandlePageAction(context.Background(), &pluginv1.PageActionRequest{
-		PageId: "authorized-devices", Surface: "account", ActorId: "42", Action: "devices.revoke", PayloadJson: []byte(`{"device_id":"device-1"}`),
+		PageId: "authorized-devices", Surface: "account", ActorId: credentials.UserID, Action: "devices.revoke", PayloadJson: []byte(`{"device_id":"device-1"}`),
 	})
 	if err != nil || !bytes.Contains(page.ResultJson, []byte(`"revoked":true`)) {
 		t.Fatalf("page revoke: %v %s", err, page.ResultJson)
@@ -240,6 +291,15 @@ func TestProviderRuntimeAuthorizationProjectionRenewalAndReplay(t *testing.T) {
 	if safeReplayCount > maxSafeReplayRecords {
 		t.Fatalf("safe replay storage exceeded its bounded window: %d", safeReplayCount)
 	}
+}
+
+func containsOperation(operations []string, wanted string) bool {
+	for _, operation := range operations {
+		if operation == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func (client testClient) seal(t *testing.T, operation string, authorization protocolv1.Authorization, body any) sealedCall {

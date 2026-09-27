@@ -28,10 +28,14 @@ func (runtime *connectRuntime) dispatch(ctx context.Context, state *providerStat
 		value, code = runtime.clearAll(state, request, now)
 	case "devices.list":
 		value, code = runtime.listDevices(state, request, now)
+	case "account.me":
+		value, code = runtime.getAccount(ctx, state, request, now)
 	case "subscriptions.list":
 		value, code = runtime.listSubscriptions(ctx, state, request, now)
 	case "subscriptions.get-content":
 		value, code = runtime.getSubscription(ctx, state, request, now)
+	case "subscriptions.usage":
+		value, code = runtime.getSubscriptionUsage(ctx, state, request, now)
 	case "messages.list":
 		value, code = runtime.listMessages(ctx, state, request, now)
 	case "messages.get":

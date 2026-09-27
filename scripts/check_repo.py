@@ -32,6 +32,7 @@ assert sink["runtime"] == "javascript-module-v1"
 assert sink_app["plugin_id"] == sink["plugin_id"]
 assert sink_app["components"][0]["entry"] == "components/provider-source/index.mjs"
 assert (ROOT / "znet-sink/src/background.mjs").is_file()
+assert sink_app["pages"][0]["styles"] == ["ui/manage/style.css"]
 assert sink_app["pages"][0]["scripts"] == ["ui/manage/page.js"]
 assert zboard["files"] == {}
 assert {Path(item["path"]).suffix for item in release["artifacts"]} == {".zbplugin", ".zspkg"}
@@ -65,6 +66,7 @@ assert set(targets["znet-sink"]["capabilities"]) == {
 }
 assert set(targets["znet-sink"]["surfaces"]) == {"znet-sink.ui.management.v1"}
 assert (ROOT / "znet-sink/ui/management.html").is_file()
+assert (ROOT / "znet-sink/ui/style.css").is_file()
 assert (ROOT / "znet-sink/ui/page.js").is_file()
 assert (ROOT / "zboard/ui/account/index.html").is_file()
 assert (ROOT / "zboard/ui/admin/index.html").is_file()

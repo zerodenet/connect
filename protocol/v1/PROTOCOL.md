@@ -189,10 +189,15 @@ Payloads are JSON objects. Providers may add fields only in a later protocol ver
 - `authorization.clear-all`: empty body; returns `{ "cleared": true }` for the provider.
 - `devices.list`: empty body. Returns devices visible to the current user, with `device_id`,
   `device_name`, `authorized_at`, `last_seen_at`, and `current`.
+- `account.me` is a discovery-negotiated, read-only extension. See
+  `extensions/account-profile.md`.
 - `subscriptions.list`: empty body. Returns `subscription_id`, `display_name`, `format`, `revision`,
   `content_sha256`, and `updated_at` for each entitled subscription.
 - `subscriptions.get-content`: body `{ "subscription_id": string, "known_revision": string|null }`.
   Returns the same metadata plus `content` when changed, or `{ "not_modified": true, ...metadata }`.
+
+The optional discovery-negotiated `subscriptions.usage` extension is specified in
+`extensions/subscription-usage.md`. It does not change any frozen v1 operation payload.
 - `messages.list`: body `{ "cursor": string|null, "limit": integer }`. Returns message summaries
   and an optional `next_cursor`.
 - `messages.get`: body `{ "message_id": string }`. Returns `message_id`, `title`, `body`,

@@ -31,6 +31,7 @@ import (
 
 const (
 	connectPluginID       = "org.zerodenet.connect.zboard"
+	connectPrincipalID    = "p1.NDI.signed-for-connect"
 	connectCapabilities   = "/.well-known/zerodenet-connect/v1/capabilities"
 	connectExchange       = "/.well-known/zerodenet-connect/v1/exchange"
 	connectProviderOrigin = "https://panel.example"
@@ -41,6 +42,13 @@ type connectAcceptanceHost struct {
 	accountCalls   int
 	messageRead    bool
 	subscriptionID string
+}
+
+func (host *connectAcceptanceHost) PluginPrincipal(_ context.Context, pluginID string, userID uint) (string, error) {
+	if pluginID != connectPluginID || userID != 42 {
+		return "", errors.New("unexpected installed-plugin principal request")
+	}
+	return connectPrincipalID, nil
 }
 
 func (host *connectAcceptanceHost) CallPluginHost(_ context.Context, pluginID, capability, operation string, payload json.RawMessage) (json.RawMessage, *pluginv1.HostCallError) {
@@ -69,11 +77,19 @@ func (host *connectAcceptanceHost) CallPluginHost(_ context.Context, pluginID, c
 		if request.Account != "user@example.com" || request.Password != "correct horse" {
 			return nil, &pluginv1.HostCallError{Code: "invalid_credentials"}
 		}
-		return encode(pluginv1.Principal{ID: "42", Display: "User", Admin: true})
+		return encode(pluginv1.Principal{ID: connectPrincipalID, Display: "User", Admin: true})
+	case "zboard.account.self.read.v1/account.self.get":
+		var request struct {
+			PrincipalID string `json:"principal_id"`
+		}
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID {
+			return badPayload()
+		}
+		return encode(map[string]any{"email": "user@example.com"})
 
 	case pluginv1.SubscriptionProjectionCapability + "/subscriptions.list":
 		var request pluginv1.SubscriptionListRequest
-		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != "42" || request.Format != "znet-sink" {
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID || request.Format != "znet-sink" {
 			return badPayload()
 		}
 		content := "version: 1\nproxies: []\n"
@@ -85,7 +101,7 @@ func (host *connectAcceptanceHost) CallPluginHost(_ context.Context, pluginID, c
 
 	case pluginv1.SubscriptionProjectionCapability + "/subscriptions.get":
 		var request pluginv1.SubscriptionContentRequest
-		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != "42" || request.SubscriptionID != host.subscriptionID || request.Format != "znet-sink" {
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID || request.SubscriptionID != host.subscriptionID || request.Format != "znet-sink" {
 			return badPayload()
 		}
 		content := "version: 1\nproxies: []\n"
@@ -101,9 +117,19 @@ func (host *connectAcceptanceHost) CallPluginHost(_ context.Context, pluginID, c
 			Revision: "r1", ContentSHA256: hex.EncodeToString(digest[:]), UpdatedAt: 1, Content: content,
 		})
 
+	case "zboard.subscription.read.v1/subscriptions.owned.get":
+		var request struct {
+			PrincipalID string `json:"principal_id"`
+			ID          uint64 `json:"id"`
+		}
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID || request.ID != 7 {
+			return badPayload()
+		}
+		return encode(map[string]any{"id": 7, "flow_used": 375, "flow_total": 1000, "end_at": time.UnixMilli(1800000000000).UTC()})
+
 	case pluginv1.MessageProjectionCapability + "/messages.list":
 		var request pluginv1.MessageListRequest
-		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != "42" || request.Limit != 20 {
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID || request.Limit != 20 {
 			return badPayload()
 		}
 		return encode(pluginv1.MessagePage{Items: []pluginv1.ProjectedMessage{{
@@ -112,7 +138,7 @@ func (host *connectAcceptanceHost) CallPluginHost(_ context.Context, pluginID, c
 
 	case pluginv1.MessageProjectionCapability + "/messages.get":
 		var request pluginv1.MessageGetRequest
-		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != "42" || request.MessageID != "9" {
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID || request.MessageID != "9" {
 			return badPayload()
 		}
 		readAt := int64(0)
@@ -126,7 +152,7 @@ func (host *connectAcceptanceHost) CallPluginHost(_ context.Context, pluginID, c
 
 	case pluginv1.MessageProjectionCapability + "/messages.mark-read":
 		var request pluginv1.MessageMarkReadRequest
-		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != "42" || request.MessageID != "9" || request.Revision != 3 {
+		if json.Unmarshal(payload, &request) != nil || request.PrincipalID != connectPrincipalID || request.MessageID != "9" || request.Revision != 3 {
 			return badPayload()
 		}
 		host.messageRead = true
@@ -203,10 +229,11 @@ func TestConnectInstalledHostEndToEnd(t *testing.T) {
 		t.Fatalf("password authorization failed: %#v", password)
 	}
 	var credentials struct {
+		UserID  string `json:"user_id"`
 		Access  string `json:"access_credential"`
 		Renewal string `json:"renewal_credential"`
 	}
-	if json.Unmarshal(password.Body, &credentials) != nil || credentials.Access == "" || credentials.Renewal == "" {
+	if json.Unmarshal(password.Body, &credentials) != nil || credentials.UserID != connectPrincipalID || credentials.Access == "" || credentials.Renewal == "" {
 		t.Fatalf("missing authorization credentials: %s", password.Body)
 	}
 	replayedRaw, _ := client.exchange(t, manager, passwordCall)
@@ -215,8 +242,12 @@ func TestConnectInstalledHostEndToEnd(t *testing.T) {
 	}
 
 	access := protocolv1.Authorization{Kind: "access", Credential: credentials.Access}
+	assertConnectOKContains(t, client, manager, "account.me", access, map[string]any{}, `"user_id":"`+connectPrincipalID+`"`)
+	assertConnectOKContains(t, client, manager, "account.me", access, map[string]any{}, `"email":"user@example.com"`)
 	assertConnectOKContains(t, client, manager, "subscriptions.list", access, map[string]any{}, `"subscription_id":"7"`)
 	assertConnectOKContains(t, client, manager, "subscriptions.get-content", access, map[string]any{"subscription_id": "7", "known_revision": nil}, `"content":"version: 1\nproxies: []\n"`)
+	assertConnectOKContains(t, client, manager, "subscriptions.usage", access, map[string]any{"subscription_id": "7"}, `"used_bytes":375`)
+	assertConnectOKContains(t, client, manager, "subscriptions.usage", access, map[string]any{"subscription_id": "7"}, `"expire_at_unix_ms":1800000000000`)
 	assertConnectOKContains(t, client, manager, "messages.list", access, map[string]any{"cursor": nil, "limit": 20}, `"message_id":"9"`)
 	assertConnectOKContains(t, client, manager, "messages.get", access, map[string]any{"message_id": "9"}, `"body":"Hello"`)
 	assertConnectOKContains(t, client, manager, "messages.mark-read", access, map[string]any{"message_id": "9"}, `"read_at":4`)
@@ -357,8 +388,8 @@ func TestConnectInstalledHostServer(t *testing.T) {
 			"source/source-1/session/renewal": base64.StdEncoding.EncodeToString([]byte(credentials.Renewal)),
 			"keys/connect-device-source-1":    base64.StdEncoding.EncodeToString(seed),
 		},
-		"scheduled_action": "lifecycle.scheduled.sync.source-1",
-		"expected":         map[string]any{"ok": true, "changed": false, "unread": float64(1)},
+		"scheduled_action": "lifecycle.scheduled.messages.source-1",
+		"expected":         map[string]any{"ok": true, "unread": float64(1)},
 	}
 	fixtureRaw, _ := json.MarshalIndent(fixture, "", "  ")
 	if err := os.WriteFile(readyPath, append(fixtureRaw, '\n'), 0o600); err != nil {

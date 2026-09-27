@@ -35,7 +35,9 @@
         "zboard.storage.v1",
         "zboard.http.route.v1",
         "zboard.account.assertion.v1",
+        "zboard.account.self.read.v1",
         "zboard.subscription.projection.v1",
+        "zboard.subscription.read.v1",
         "zboard.message.projection.v1"
       ]
     },
@@ -54,6 +56,7 @@
         "plugin.storage.read",
         "plugin.storage.write",
         "notifications.post",
+        "plugin.logs.write",
         "tasks.schedule"
       ]
     }

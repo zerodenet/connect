@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,10 +13,53 @@ import (
 )
 
 const subscriptionFormat = "znet-sink"
+const subscriptionReadCapability = "zboard.subscription.read.v1"
+const accountSelfReadCapability = "zboard.account.self.read.v1"
+
+func (runtime *connectRuntime) getAccount(ctx context.Context, state *providerState, request protocolv1.RequestMessage, now time.Time) (any, string) {
+	if !requireEmptyBody(request.Body) {
+		return nil, "invalid_request"
+	}
+	_, session, code := authenticateSession(state, request, now)
+	if code != "" {
+		return nil, code
+	}
+	host, err := runtime.openHost()
+	if err != nil {
+		return nil, "temporary_unavailable"
+	}
+	defer host.Close()
+	var account struct {
+		Email string `json:"email"`
+	}
+	err = host.Call(ctx, accountSelfReadCapability, "account.self.get", map[string]any{
+		"principal_id": session.UserID,
+	}, &account)
+	if err != nil {
+		return nil, hostErrorCode(err)
+	}
+	if strings.TrimSpace(account.Email) == "" {
+		return nil, "temporary_unavailable"
+	}
+	return map[string]any{"user_id": session.UserID, "email": account.Email}, ""
+}
+
+const maxSafeJSONInteger = int64(1<<53 - 1)
 
 type subscriptionContentBody struct {
 	SubscriptionID string         `json:"subscription_id"`
 	KnownRevision  nullableString `json:"known_revision"`
+}
+
+type subscriptionUsageBody struct {
+	SubscriptionID string `json:"subscription_id"`
+}
+
+type ownedSubscriptionUsage struct {
+	ID        uint64    `json:"id"`
+	FlowUsed  int64     `json:"flow_used"`
+	FlowTotal int64     `json:"flow_total"`
+	EndAt     time.Time `json:"end_at"`
 }
 
 type messageListBody struct {
@@ -80,6 +124,49 @@ func (runtime *connectRuntime) getSubscription(ctx context.Context, state *provi
 		return nil, hostErrorCode(err)
 	}
 	return subscriptionPayload(item, true), ""
+}
+
+func (runtime *connectRuntime) getSubscriptionUsage(ctx context.Context, state *providerState, request protocolv1.RequestMessage, now time.Time) (any, string) {
+	var body subscriptionUsageBody
+	if decodeBody(request.Body, &body) != nil {
+		return nil, "invalid_request"
+	}
+	subscriptionID, parseErr := strconv.ParseUint(body.SubscriptionID, 10, 64)
+	if parseErr != nil || subscriptionID == 0 || strconv.FormatUint(subscriptionID, 10) != body.SubscriptionID {
+		return nil, "invalid_request"
+	}
+	_, session, code := authenticateSession(state, request, now)
+	if code != "" {
+		return nil, code
+	}
+	host, err := runtime.openHost()
+	if err != nil {
+		return nil, "temporary_unavailable"
+	}
+	defer host.Close()
+	var usage ownedSubscriptionUsage
+	err = host.Call(ctx, subscriptionReadCapability, "subscriptions.owned.get", map[string]any{
+		"principal_id": session.UserID, "id": subscriptionID,
+	}, &usage)
+	if err != nil {
+		code := hostErrorCode(err)
+		if code == "forbidden" || code == "not_found" {
+			return nil, "not_found"
+		}
+		return nil, code
+	}
+	expireAt := usage.EndAt.UnixMilli()
+	if usage.ID != subscriptionID || usage.FlowUsed < 0 || usage.FlowUsed > maxSafeJSONInteger ||
+		usage.FlowTotal <= 0 || usage.FlowTotal > maxSafeJSONInteger ||
+		expireAt <= 0 || expireAt > maxSafeJSONInteger {
+		return nil, "temporary_unavailable"
+	}
+	return map[string]any{
+		"subscription_id":   body.SubscriptionID,
+		"used_bytes":        usage.FlowUsed,
+		"total_bytes":       usage.FlowTotal,
+		"expire_at_unix_ms": expireAt,
+	}, ""
 }
 
 func (runtime *connectRuntime) listMessages(ctx context.Context, state *providerState, request protocolv1.RequestMessage, now time.Time) (any, string) {

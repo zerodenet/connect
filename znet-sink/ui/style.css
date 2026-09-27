@@ -1,0 +1,97 @@
+.connect-sync-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.connect-notice:not([hidden]) {
+  position: sticky;
+  top: 8px;
+  z-index: 40;
+  max-height: min(40vh, 240px);
+  overflow: auto;
+  padding: 11px 14px;
+  border-width: 1px 1px 1px 4px;
+  border-style: solid;
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 16%);
+}
+.connect-notice[data-znet-notice="info"] { border-color: var(--ring); }
+.connect-notice[data-znet-notice="success"] { border-color: var(--success); color: var(--foreground); }
+.connect-notice[data-znet-notice="warning"] { border-color: var(--warning); color: var(--foreground); }
+.connect-notice[data-znet-notice="error"] { border-color: var(--destructive); color: var(--foreground); }
+.connect-sync-options button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--input);
+  border-radius: 7px;
+  background: var(--background);
+  color: var(--muted-foreground);
+}
+.connect-sync-options button[aria-checked="true"] {
+  border-color: var(--ring);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-weight: 600;
+}
+.connect-message-content {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.connect-message-content strong,
+.connect-message-content small {
+  overflow-wrap: anywhere;
+}
+.connect-message-content button {
+  justify-self: start;
+  margin-top: 3px;
+}
+.connect-message-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(75vh, 680px);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 18%);
+}
+.connect-message-dialog::backdrop {
+  background: rgb(0 0 0 / 48%);
+}
+.connect-message-dialog-header,
+.connect-message-dialog-body,
+.connect-message-dialog-footer {
+  padding: 16px 20px;
+}
+.connect-message-dialog-header {
+  border-bottom: 1px solid var(--border);
+}
+.connect-message-dialog-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.connect-message-dialog-header p {
+  margin: 5px 0 0;
+  color: var(--muted-foreground);
+}
+.connect-message-dialog-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.connect-message-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+.connect-danger-action {
+  color: var(--destructive) !important;
+}

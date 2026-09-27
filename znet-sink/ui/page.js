@@ -16,9 +16,12 @@
       let currentView = 'sources';
       let diagnosticsReturnView = 'sources';
       let requestInFlight = false;
+      let activeAction = null;
       let statusGeneration = 0;
       let networkPath = 'direct';
+      let syncIntervalSeconds = 900;
       let providerCapabilities = null;
+      const usageUnavailableMessage = '此服务尚未开放订阅用量能力，客户端暂时无法显示流量和到期时间。请在服务端启用通用订阅用量能力后重试。';
       let availableSubscriptions = [];
       let selectedSubscriptionId = null;
       let messageItems = [];
@@ -26,6 +29,23 @@
       let activeSource = null;
 
       const networkPathOptions = () => [...document.querySelectorAll('[data-znet-select-option]')];
+      const syncIntervalLabels = new Map([
+        [0, '手动'], [900, '15 分钟'], [1800, '30 分钟'],
+        [3600, '1 小时'], [21600, '6 小时'], [86400, '24 小时'],
+      ]);
+      const sourceSyncInterval = source => source?.sync_interval_seconds ?? 900;
+      const syncIntervalLabel = source => {
+        const interval = sourceSyncInterval(source);
+        return interval === 0 ? '手动' : `每 ${syncIntervalLabels.get(interval)}`;
+      };
+
+      function setSyncInterval(value) {
+        if (!syncIntervalLabels.has(value)) throw new Error('自动同步间隔无效。');
+        syncIntervalSeconds = value;
+        for (const option of document.querySelectorAll('[data-sync-interval]')) {
+          option.setAttribute('aria-checked', String(Number(option.dataset.syncInterval) === value));
+        }
+      }
 
       function setNetworkPath(value) {
         const options = networkPathOptions();
@@ -53,7 +73,24 @@
         const node = byId('notice');
         node.hidden = !message;
         node.setAttribute('data-znet-notice', kind || 'info');
+        node.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+        node.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
         node.textContent = message || '';
+        if (message && ['success', 'warning', 'error'].includes(kind)) {
+          const action = activeAction || currentView;
+          const labels = {
+            save: '来源设置', login: '设备授权', bindSubscription: '订阅关联',
+            syncNow: '手动同步', removeSource: '来源移除',
+            retrySubscriptions: '订阅清单读取', changeSubscription: '订阅切换',
+          };
+          const level = kind === 'error' ? 'error' : kind === 'warning' ? 'warn' : 'info';
+          const outcome = kind === 'success' ? '完成' : kind === 'warning' ? '需关注' : '失败';
+          try {
+            Promise.resolve(znetPlugin.logs?.write?.(component, level,
+              `Connect ${labels[action] || '管理操作'}${outcome}`,
+              {action, view: currentView, outcome: kind})).catch(() => {});
+          } catch { /* Logging cannot interrupt an interactive operation. */ }
+        }
       }
 
       function connectFailure(error) {
@@ -90,6 +127,15 @@
           if (error && !error.connectStage) error.connectStage = stage;
           throw error;
         }
+      }
+
+      async function settleHostOperations(operations) {
+        const failures = [];
+        for (const operation of operations) {
+          try { await operation(); }
+          catch (error) { failures.push(error); }
+        }
+        return failures;
       }
 
       function showView(id) {
@@ -192,36 +238,59 @@
       const sourceStateGet = suffix => stateGet(sourceKey(suffix));
       const sourceStatePut = (suffix, value) => statePut(sourceKey(suffix), value);
       const sourceSecretKey = suffix => sourceKey(suffix);
-      const sourceTaskId = source => `connect-sync-${source.id}`;
-      const ensureScheduledSync = () => sdk('tasks.schedule', 'self', 'schedule_put', {
-        taskId: sourceTaskId(activeSource), action: `sync.${activeSource.id}`, intervalSeconds: 900,
-      }, 65536);
+      const sourceTasks = source => [
+        {taskId: `connect-sync-${source.id}`, action: `sync.${source.id}`},
+        {taskId: `connect-usage-${source.id}`, action: `usage.${source.id}`},
+        {taskId: `connect-messages-${source.id}`, action: `messages.${source.id}`},
+      ];
+      const ensureScheduledSync = async () => {
+        const intervalSeconds = sourceSyncInterval(activeSource);
+        const tasks = await sdk('tasks.schedule', 'self', 'schedule_list', {}, 65536);
+        for (const {taskId, action} of sourceTasks(activeSource)) {
+          const existing = tasks.find(task => task.taskId === taskId);
+          if (intervalSeconds === 0) {
+            if (existing) await sdk('tasks.schedule', 'self', 'schedule_delete', {taskId}, 65536);
+          } else if (existing?.intervalSeconds !== intervalSeconds || existing.action !== action) {
+            await sdk('tasks.schedule', 'self', 'schedule_put', {taskId, action, intervalSeconds}, 65536);
+          }
+        }
+      };
 
       function validateSources(nextSources) {
         if (nextSources.length > 16) throw new Error('Connect 最多支持 16 个来源。');
         const ids = new Set();
+        const origins = new Set();
         for (const source of nextSources) {
           const origin = new URL(source.origin);
           if (!validIdentifier(source.id) || ids.has(source.id) || !source.name || source.name.length > 80 ||
               origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash ||
-              !['direct', 'core'].includes(source.network_path)) {
+              !['direct', 'core'].includes(source.network_path) || !syncIntervalLabels.has(sourceSyncInterval(source))) {
             throw new Error('Connect 来源记录无效。');
           }
+          if (origins.has(source.origin)) throw new Error('同一服务地址已存在，请管理现有来源。');
           ids.add(source.id);
+          origins.add(source.origin);
         }
-        return [...new Set(nextSources.map(source => source.origin))];
+        return [...origins];
       }
 
-      async function saveSources(nextSources) {
+      async function saveSources(nextSources, forceConfiguration = false) {
         const origins = validateSources(nextSources);
-        const current = await znetPlugin.configuration.get(component);
-        await znetPlugin.configuration.save(component, {provider_origins: JSON.stringify(origins)});
+        const originsChanged = forceConfiguration || JSON.stringify(validateSources(sources)) !== JSON.stringify(origins);
+        let current = null;
+        if (originsChanged) {
+          current = await znetPlugin.configuration.get(component);
+          await znetPlugin.configuration.save(component, {provider_origins: JSON.stringify(origins)});
+        }
         try {
           await statePut('sources/index', nextSources);
         } catch (error) {
-          try { await znetPlugin.configuration.save(component, current); }
-          catch { throw new Error('来源未保存完整，配置回滚也失败。请保持页面打开并查看技术诊断。'); }
-          throw new Error(`来源未保存，已恢复先前配置：${error.message || '插件状态写入失败'}`);
+          if (originsChanged) {
+            try { await znetPlugin.configuration.save(component, current); }
+            catch { throw new Error('来源未保存完整，配置回滚也失败。请保持页面打开并查看技术诊断。'); }
+            throw new Error(`来源未保存，已恢复先前配置：${error.message || '插件状态写入失败'}`);
+          }
+          throw new Error(`来源未保存：${error.message || '插件状态写入失败'}`);
         }
         sources = nextSources;
       }
@@ -235,6 +304,7 @@
         byId('sourceName').value = source.name;
         byId('providerOrigin').value = source.origin;
         setNetworkPath(source.network_path || 'direct');
+        setSyncInterval(sourceSyncInterval(source));
       }
 
       function renderSourceList() {
@@ -258,18 +328,41 @@
           const title = document.createElement('strong');
           title.textContent = source.name;
           const meta = document.createElement('small');
-          meta.textContent = `${source.origin} · ${source.network_path === 'core' ? '通过内核' : '直连'}`;
+          meta.textContent = `${source.origin} · ${source.network_path === 'core' ? '通过内核' : '直连'} · ${syncIntervalLabel(source)}`;
           const actions = document.createElement('div');
           actions.setAttribute('data-znet-actions', '');
           const open = document.createElement('button');
           open.type = 'button';
           open.setAttribute('data-variant', 'outline');
           open.textContent = '管理来源';
-          open.addEventListener('click', () => runRequest(null, async () => {
-            await selectSource(source);
-            await openActiveSource();
+          open.addEventListener('click', () => {
+            statusGeneration++;
+            notice('');
+            selectSource(source);
+            showView('source');
+          });
+          const view = document.createElement('button');
+          view.type = 'button';
+          view.setAttribute('data-variant', 'ghost');
+          view.textContent = '查看连接';
+          view.addEventListener('click', () => runRequest(null, async () => {
+            notice('正在读取连接状态…');
+            try {
+              selectSource(source);
+              await openActiveSource();
+              if (byId('notice').textContent === '正在读取连接状态…') notice('');
+            } catch (error) {
+              notice(`打开连接详情失败：${connectFailure(error)}`, 'error');
+            }
           }));
-          actions.append(open);
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.setAttribute('data-variant', 'ghost');
+          remove.className = 'connect-danger-action';
+          remove.textContent = '移除';
+          remove.setAttribute('aria-label', `移除来源 ${source.name}`);
+          remove.addEventListener('click', () => runRequest(null, () => removeSourceRecord(source)));
+          actions.append(open, view, remove);
           content.append(title, meta, actions);
           row.append(mark, content);
           list.append(row);
@@ -458,13 +551,12 @@
             access_expires_at: result.access_expires_at, renewal_expires_at: result.renewal_expires_at,
           });
         } catch (error) {
-          const rollback = await Promise.allSettled([
-            secretDelete(sourceSecretKey('session/access')),
-            secretDelete(sourceSecretKey('session/renewal')),
-            znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
+          const rollbackFailures = await settleHostOperations([
+            () => secretDelete(sourceSecretKey('session/access')),
+            () => secretDelete(sourceSecretKey('session/renewal')),
+            () => znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
           ]);
-          const failed = rollback.some(item => item.status === 'rejected');
-          const failure = new Error(failed
+          const failure = new Error(rollbackFailures.length
             ? '客户端写入会话状态失败，清理结果也未能确认。请不要继续关联订阅。'
             : `客户端写入会话状态失败，已清除本次凭据；可以重试授权。${error?.message || ''}`);
           failure.connectStage = '保存设备会话';
@@ -487,10 +579,12 @@
           renewed = await exchange('authorization.renew', {kind: 'renewal', credential: renewal}, {});
         } catch (error) {
           if (['communication_disabled', 'reauthorization_required', 'authorization_revoked', 'replay_rejected', 'unauthorized'].includes(error.connectCode)) {
-            await Promise.all([
-              secretDelete(sourceSecretKey('session/access')), secretDelete(sourceSecretKey('session/renewal')),
-              znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
+            const cleanupFailures = await settleHostOperations([
+              () => secretDelete(sourceSecretKey('session/access')),
+              () => secretDelete(sourceSecretKey('session/renewal')),
+              () => znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
             ]);
+            if (cleanupFailures.length) throw cleanupFailures[0];
           }
           throw error;
         }
@@ -499,9 +593,13 @@
         return {kind: 'access', credential: access};
       }
 
-      function renderSubscriptions(items) {
+      function renderSubscriptions(items, currentId = null) {
         availableSubscriptions = items;
-        selectedSubscriptionId = items[0]?.subscription_id || null;
+        selectedSubscriptionId = items.find(item => item.subscription_id === currentId)?.subscription_id || items[0]?.subscription_id || null;
+        byId('subscriptionHint').textContent = currentId
+          ? '选择新的订阅。新订阅成功写入后，未被其他来源使用的旧订阅会从客户端移除。'
+          : '选择要交给客户端托管的订阅，然后确认关联。';
+        byId('bindSubscription').textContent = currentId ? '确认选择' : '确认关联';
         const list = byId('subscriptionList');
         list.replaceChildren();
         if (!items.length) {
@@ -509,15 +607,15 @@
           strong.textContent = '没有可用订阅';
           list.append(strong, document.createTextNode('当前账号没有可投影到客户端的订阅。'));
         } else {
-          for (const [index, item] of items.entries()) {
+          for (const item of items) {
             const label = document.createElement('label');
             label.style.cssText = 'display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer';
             const input = document.createElement('input');
-            input.type = 'radio'; input.name = 'connect-subscription'; input.value = item.subscription_id; input.checked = index === 0;
+            input.type = 'radio'; input.name = 'connect-subscription'; input.value = item.subscription_id; input.checked = item.subscription_id === selectedSubscriptionId;
             input.style.width = 'auto'; input.style.height = 'auto';
             input.addEventListener('change', () => { selectedSubscriptionId = input.value; });
             const text = document.createElement('span');
-            text.textContent = item.display_name;
+            text.textContent = `${item.display_name}${item.subscription_id === currentId ? '（当前）' : ''}`;
             label.append(input, text); list.append(label);
           }
         }
@@ -527,26 +625,96 @@
       async function listSubscriptions() {
         const authorization = await accessAuthorization();
         const result = await exchange('subscriptions.list', authorization, {});
-        renderSubscriptions(result.subscriptions || []);
+        const binding = await sourceStateGet('subscription/binding');
+        renderSubscriptions(result.subscriptions || [], binding?.remote_subscription_id);
         return result.subscriptions || [];
       }
 
-      async function pullSubscription(subscriptionId, subscriptionName, knownRevision = null) {
+      async function refreshAccountProfile() {
+        const label = byId('completeAccount');
+        label.textContent = '正在读取…';
+        if (!providerCapabilities?.operations?.includes('account.me')) {
+          label.textContent = '服务未提供账号信息';
+          return;
+        }
+        try {
+          const account = await exchange('account.me', await accessAuthorization(), {});
+          if (typeof account.email !== 'string' || !account.email.trim()) throw new Error('账号信息无效');
+          label.textContent = account.email;
+        } catch (error) {
+          label.textContent = `读取失败：${connectFailure(error)}`;
+        }
+      }
+
+      function subscriptionContentForHost(projected) {
+        if (typeof projected.content !== 'string' || !projected.content) {
+          throw new Error('服务没有返回可用的订阅内容。');
+        }
+        // ZBoard's plugin projection returns rendered JSON, while the client's
+        // znet-sink subscription format accepts the Base64 delivery form.
+        if (projected.format === 'znet-sink' && projected.content.trimStart().startsWith('{')) {
+          try { JSON.parse(projected.content); }
+          catch { throw new Error('服务返回的 ZNet Sink 订阅不是有效 JSON。'); }
+          return utf8Base64(projected.content);
+        }
+        return projected.content;
+      }
+
+      async function refreshSubscriptionUsage(subscriptionId, authorization) {
+        if (!providerCapabilities?.operations?.includes('subscriptions.usage')) {
+          await sourceStatePut('subscription/usage_error', {message: usageUnavailableMessage, checked_at: Date.now()}).catch(() => {});
+          return usageUnavailableMessage;
+        }
+        try {
+          const usage = await exchange('subscriptions.usage', authorization, {subscription_id: subscriptionId});
+          const valid = usage.subscription_id === subscriptionId &&
+            ['used_bytes', 'total_bytes', 'expire_at_unix_ms'].every(key => Number.isSafeInteger(usage[key]) && usage[key] >= 0) &&
+            usage.total_bytes > 0 && usage.expire_at_unix_ms > 0;
+          if (!valid) throw new Error('服务返回的订阅用量信息无效。');
+          await sdk('subscriptions.manage', 'self', 'subscription_metadata_update', {
+            providerId: providerCapabilities.provider_id,
+            remoteSubscriptionId: subscriptionId,
+            usage: {usedBytes: usage.used_bytes, totalBytes: usage.total_bytes, expireAtUnixMs: usage.expire_at_unix_ms},
+          });
+          await sourceStatePut('subscription/usage_checked_at', Date.now()).catch(() => {});
+          await sourceStatePut('subscription/usage_error', null).catch(() => {});
+          return null;
+        } catch (error) {
+          const message = error?.message === '插件宿主操作失败'
+            ? '订阅配置已同步，但当前客户端未提供托管订阅用量写入能力。请升级到包含 subscription_metadata_update 的客户端版本后重试。'
+            : connectFailure(error);
+          await sourceStatePut('subscription/usage_error', {message, checked_at: Date.now()}).catch(() => {});
+          return message;
+        }
+      }
+
+      async function pullSubscription(subscriptionId, subscriptionName, {force = false} = {}) {
         const authorization = await accessAuthorization();
+        const existingBinding = await sourceStateGet('subscription/binding');
+        const appliedRevision = await sourceStateGet('subscription/applied_revision');
+        const alreadyManaged = existingBinding?.remote_subscription_id === subscriptionId;
+        const knownRevision = !force && alreadyManaged &&
+          appliedRevision?.remote_subscription_id === subscriptionId &&
+          appliedRevision?.revision === existingBinding.revision
+          ? appliedRevision.revision : null;
+        // Existing plans may stop projecting configuration when expired or exhausted.
+        // Refresh quota before that request so their final usage remains visible.
+        const previousUsageError = alreadyManaged
+          ? await refreshSubscriptionUsage(subscriptionId, authorization) : null;
         const projected = await exchange('subscriptions.get-content', authorization, {
           subscription_id: subscriptionId,
           known_revision: knownRevision,
         });
-        if (projected.not_modified === true) return {notModified: true};
-        if (typeof projected.content !== 'string' || !projected.content) {
-          throw new Error('服务没有返回可用的订阅内容。');
+        if (projected.not_modified === true) {
+          return {notModified: true, usageError: previousUsageError};
         }
+        const content = subscriptionContentForHost(projected);
         const profile = await sdk('subscriptions.manage', 'self', 'subscription_apply', {
           providerId: providerCapabilities.provider_id,
           remoteSubscriptionId: subscriptionId,
           sourceName: activeSource.name,
           subscriptionName: projected.display_name || subscriptionName,
-          content: projected.content,
+          content,
           format: projected.format,
           revision: projected.revision,
         });
@@ -557,9 +725,72 @@
           revision: projected.revision,
         };
         await sourceStatePut('subscription/binding', binding);
+        // This marker is deliberately separate from the protocol binding. Older
+        // plugin/client combinations could advance the binding revision without
+        // durably replacing the managed profile. Absence or disagreement forces
+        // one full projection + apply, which repairs that historical split-brain.
+        await sourceStatePut('subscription/applied_revision', {
+          remote_subscription_id: subscriptionId,
+          revision: projected.revision,
+        });
+        // The host's subscription_apply replaces quota metadata. Restore the
+        // provider's latest usage after every content apply, including updates.
+        const usageError = await refreshSubscriptionUsage(subscriptionId, authorization);
         byId('completeName').textContent = profile.name;
         byId('completeOrigin').textContent = providerCapabilities.provider_id;
-        return {notModified: false, profile, binding};
+        return {notModified: false, profile, binding, usageError};
+      }
+
+      async function removePendingSubscription() {
+        const pending = await sourceStateGet('subscription/pending_removal');
+        if (!pending?.id) return null;
+        const current = await sourceStateGet('subscription/binding');
+        if (current?.id === pending.id) {
+          await znetPlugin.storage.delete(component, 'state', sourceKey('subscription/pending_removal'));
+          return null;
+        }
+        const others = sources.filter(source => source.id !== activeSource.id && source.origin === activeSource.origin);
+        for (const source of others) {
+          const binding = await stateGet(`source/${source.id}/subscription/binding`);
+          if (binding?.id === pending.id) {
+            await znetPlugin.storage.delete(component, 'state', sourceKey('subscription/pending_removal'));
+            return null;
+          }
+        }
+        try {
+          await sdk('subscriptions.manage', 'self', 'subscription_remove', {
+            subscriptionId: pending.id, removeAssociatedConfig: true,
+          });
+        } catch (error) {
+          if (error?.code !== 'not_found') throw error;
+        }
+        await znetPlugin.storage.delete(component, 'state', sourceKey('subscription/pending_removal'));
+        return null;
+      }
+
+      async function selectSubscription(item) {
+        await removePendingSubscription();
+        const previous = await sourceStateGet('subscription/binding');
+        const changing = previous?.id && previous.remote_subscription_id !== item.subscription_id;
+        if (changing) await sourceStatePut('subscription/pending_removal', {id: previous.id});
+        let result;
+        try { result = await pullSubscription(item.subscription_id, item.display_name); }
+        catch (error) {
+          if (changing) {
+            const current = await sourceStateGet('subscription/binding').catch(() => null);
+            if (current?.id === previous.id) {
+              await znetPlugin.storage.delete(component, 'state', sourceKey('subscription/pending_removal')).catch(() => {});
+            }
+          }
+          throw error;
+        }
+        if (changing && previous.id !== result.binding?.id) {
+          try { await removePendingSubscription(); }
+          catch (error) { result.removalError = connectFailure(error); }
+        } else if (changing) {
+          await znetPlugin.storage.delete(component, 'state', sourceKey('subscription/pending_removal'));
+        }
+        return result;
       }
 
       function renderMessages(items) {
@@ -581,6 +812,7 @@
           const mark = document.createElement('span');
           mark.setAttribute('data-znet-status-mark', '');
           const content = document.createElement('div');
+          content.className = 'connect-message-content';
           const title = document.createElement('strong');
           title.textContent = item.title || '未命名消息';
           const meta = document.createElement('small');
@@ -603,7 +835,9 @@
           const message = await exchange('messages.get', authorization, {message_id: messageId});
           byId('messageDetailTitle').textContent = message.title || '消息';
           byId('messageDetailBody').textContent = message.body || '';
-          byId('messageDetail').hidden = false;
+          byId('messageDetailMeta').textContent = message.published_at
+            ? new Date(message.published_at * 1000).toLocaleString() : '';
+          if (!byId('messageDialog').open) byId('messageDialog').showModal();
           const summary = messageItems.find(item => item.message_id === messageId);
           if (summary?.read_at == null) {
             await exchange('messages.mark-read', await accessAuthorization(), {message_id: messageId});
@@ -622,14 +856,26 @@
         const previous = await sourceStateGet('messages/summary');
         const previousUnread = new Set((previous?.items || []).filter(message => message.read_at == null).map(message => message.message_id));
         const newUnread = unread.filter(message => !previousUnread.has(message.message_id));
+        let notificationFailed = false;
         if (notify && newUnread.length) {
-          await sdk('notifications.post', 'self', 'notification_post', {
-            kind: 'info', message: `Connect 有 ${newUnread.length} 条新消息`, duration_ms: 5000,
-            action: {pageId: 'manage', route: `messages.${activeSource.id}`, reference: newUnread[0]?.message_id},
-          }, 65536);
+          try {
+            await sdk('notifications.post', 'self', 'notification_post', {
+              kind: 'info', message: `Connect 有 ${newUnread.length} 条新消息`, duration_ms: 5000,
+              action: {pageId: 'manage', route: `messages.${activeSource.id}`, reference: newUnread[0]?.message_id},
+            }, 65536);
+          } catch {
+            notificationFailed = true;
+          }
         }
         await sourceStatePut('messages/summary', {checked_at: Date.now(), unread: unread.length, items});
         renderMessages(items);
+        if (notificationFailed) {
+          try {
+            await znetPlugin.logs?.write?.(component, 'warn', 'Connect 消息已同步，通知未送达',
+              {action: 'messages', outcome: 'notification_failed'});
+          } catch { /* Logging must not change the message result. */ }
+        }
+        return {notificationFailed};
       }
 
       async function currentStatus() {
@@ -646,6 +892,12 @@
         }
         const session = configured ? await sourceStateGet('session/metadata') : null;
         const binding = configured ? await sourceStateGet('subscription/binding') : null;
+        const usageError = configured && binding
+          ? !providerCapabilities?.operations?.includes('subscriptions.usage') && providerReady
+            ? {message: usageUnavailableMessage}
+            : await sourceStateGet('subscription/usage_error')
+          : null;
+        const usageCheckedAt = configured && binding ? await sourceStateGet('subscription/usage_checked_at') : null;
         return {
           schema_version: 1, product_id: 'org.zerodenet.connect', adapter: 'znet-sink',
           phase: !configured ? 'needs-configuration' : !providerReady ? 'blocked' : binding ? 'ready' : session ? 'needs-subscription' : 'needs-authorization',
@@ -655,7 +907,10 @@
             {id:'provider-capability', label:'远端 Connect 服务', state:providerReady?'ready':configured?'blocked':'waiting', detail:providerReady?'服务身份和通信密钥已验证。':providerError || '保存后检查。'},
             {id:'service-identity', label:'服务身份与设备密钥', state:providerReady?'ready':'waiting', detail:providerReady?'身份已固定，设备私钥由客户端保管。':'等待服务验证。'},
             {id:'account-authorization', label:'账号授权', state:session?'ready':'waiting', detail:session?'当前设备已授权。':'密码仅用于一次授权。'},
-            {id:'subscription-binding', label:'订阅关联', state:binding?'ready':'waiting', detail:binding?binding.name:'授权后选择订阅。'},
+            {id:'subscription-binding', label:'订阅关联', state:binding?'ready':'waiting', detail:binding
+              ? `${binding.name}${usageError?.message ? ` · 流量信息：${usageError.message}` : ''}` : '授权后选择订阅。'},
+            {id:'subscription-usage', label:'流量与到期时间', state:binding?(usageError?.message?'action_required':usageCheckedAt?'ready':'waiting'):'waiting',
+              detail:binding?(usageError?.message || (usageCheckedAt ? '最近一次用量已写入客户端。' : '等待首次用量同步。')):'关联订阅后检查。'},
             {id:'messages', label:'消息', state:session?'ready':'waiting', detail:session?'消息投影已可用。':'授权后可用。'},
           ],
           capability_gap: providerError ? {
@@ -690,6 +945,7 @@
 
       async function clearActiveSourceRuntime(removeSubscription) {
         if (!activeSource) return;
+        if (removeSubscription) await removePendingSubscription();
         const binding = await sourceStateGet('subscription/binding');
         if (removeSubscription && binding?.id) {
           await sdk('subscriptions.manage', 'self', 'subscription_remove', {
@@ -697,30 +953,64 @@
             removeAssociatedConfig: true,
           });
         }
-        await Promise.all([
-          secretDelete(sourceSecretKey('trust/provider')),
-          secretDelete(sourceSecretKey('session/access')),
-          secretDelete(sourceSecretKey('session/renewal')),
-          secretDelete(`keys/${activeSource.device_key_name || `connect-device-${activeSource.id}`}`),
-          sdk('tasks.schedule', 'self', 'schedule_delete', {taskId: sourceTaskId(activeSource)}, 65536),
-          znetPlugin.storage.delete(component, 'state', sourceKey('device/identity')),
-          znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
-          znetPlugin.storage.delete(component, 'state', sourceKey('subscription/binding')),
-          znetPlugin.storage.delete(component, 'state', sourceKey('messages/summary')),
+        const cleanupFailures = await settleHostOperations([
+          () => secretDelete(sourceSecretKey('trust/provider')),
+          () => secretDelete(sourceSecretKey('session/access')),
+          () => secretDelete(sourceSecretKey('session/renewal')),
+          () => secretDelete(`keys/${activeSource.device_key_name || `connect-device-${activeSource.id}`}`),
+          ...sourceTasks(activeSource).map(({taskId}) => () => sdk('tasks.schedule', 'self', 'schedule_delete', {taskId}, 65536)),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('device/identity')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('session/metadata')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('subscription/binding')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('subscription/applied_revision')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('subscription/usage_error')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('subscription/usage_checked_at')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('subscription/pending_removal')),
+          () => znetPlugin.storage.delete(component, 'state', sourceKey('messages/summary')),
         ]);
+        if (cleanupFailures.length) throw cleanupFailures[0];
+      }
+
+      async function removeSourceRecord(source) {
+        try {
+          const binding = await stateGet(`source/${source.id}/subscription/binding`);
+          const sameOrigin = sources.filter(item => item.id !== source.id && item.origin === source.origin);
+          const sharedBindings = [];
+          for (const item of sameOrigin) sharedBindings.push(await stateGet(`source/${item.id}/subscription/binding`));
+          const sharedSubscription = binding?.id && sharedBindings.some(item => item?.id === binding.id);
+          const consequence = sharedSubscription
+            ? '该托管订阅仍由同地址的其他来源使用，不会删除订阅。'
+            : '对应的客户端托管订阅及其关联配置也会一并移除。';
+          if (!confirm(`确定移除来源“${source.name}”吗？${consequence}`)) return;
+          await selectSource(source);
+          await clearActiveSourceRuntime(!sharedSubscription);
+          await saveSources(sources.filter(item => item.id !== source.id));
+          activeSource = null;
+          renderSourceList();
+          showView('sources');
+          notice(sharedSubscription
+            ? '来源和设备授权已移除；共享的托管订阅由其他来源保留。'
+            : '来源、设备授权和托管订阅已移除。', 'success');
+        } catch (error) {
+          notice(`移除来源失败：${connectFailure(error)}；请重试。`, 'error');
+        }
       }
 
       async function openActiveSource() {
         const value = await refreshStatus();
         if (value?.phase === 'ready') {
-          const [binding, messageSummary] = await Promise.all([
-            sourceStateGet('subscription/binding'), sourceStateGet('messages/summary'),
-          ]);
+          const binding = await sourceStateGet('subscription/binding');
+          const messageSummary = await sourceStateGet('messages/summary');
           byId('completeName').textContent = binding?.name || activeSource.name;
           byId('completeOrigin').textContent = activeSource.origin;
+          byId('completeSyncInterval').textContent = syncIntervalLabel(activeSource);
           renderMessages(messageSummary?.items || []);
           await ensureScheduledSync().catch(error => notice(error.message || '无法启用后台同步', 'error'));
           showView('complete');
+          await refreshAccountProfile();
+          const usageCheck = value.checks.find(check => check.id === 'subscription-usage');
+          if (usageCheck?.state === 'action_required') notice(usageCheck.detail, 'warning');
+          await removePendingSubscription().catch(error => notice(`旧订阅移除失败：${connectFailure(error)}`, 'warning'));
           return value;
         }
         if (value?.phase === 'needs-subscription') {
@@ -738,11 +1028,13 @@
       async function runRequest(buttonId, task) {
         if (requestInFlight) return;
         requestInFlight = true;
+        activeAction = buttonId;
         const button = buttonId ? byId(buttonId) : null;
         if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
         try { return await task(); }
         finally {
           requestInFlight = false;
+          activeAction = null;
           if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
         }
       }
@@ -764,6 +1056,7 @@
       byId('save').addEventListener('click', () => runRequest('save', async () => {
         notice(''); statusGeneration++;
         try {
+          const editingExisting = Boolean(activeSource);
           const sourceName = byId('sourceName').value.trim();
           if (!sourceName) throw new Error('请输入名称。');
           const origin = new URL(byId('providerOrigin').value.trim());
@@ -771,11 +1064,9 @@
             throw new Error('服务地址必须是只包含主机和可选端口的 HTTPS 地址。');
           }
           if (activeSource && activeSource.origin !== origin.origin) {
-            const [binding, session, trust] = await Promise.all([
-              sourceStateGet('subscription/binding'),
-              sourceStateGet('session/metadata'),
-              secretGet(sourceSecretKey('trust/provider')),
-            ]);
+            const binding = await sourceStateGet('subscription/binding');
+            const session = await sourceStateGet('session/metadata');
+            const trust = await secretGet(sourceSecretKey('trust/provider'));
             if (binding || session || trust) {
               throw new Error('来源已有服务信任或设备授权。请先移除旧来源，再添加新地址，避免遗留托管订阅和密钥。');
             }
@@ -786,16 +1077,29 @@
             name: sourceName,
             origin: origin.origin,
             network_path: networkPath,
+            sync_interval_seconds: syncIntervalSeconds,
             device_key_name: activeSource?.device_key_name || `connect-device-${activeSource?.id || bytesToHex(randomBytes(12))}`,
           };
           const next = activeSource
             ? sources.map(item => item.id === activeSource.id ? source : item)
             : [...sources, source];
+          const hasSession = editingExisting && Boolean(await sourceStateGet('session/metadata'));
           await saveSources(next);
           activeSource = source;
+          let scheduleError = null;
+          if (hasSession) {
+            await ensureScheduledSync().catch(error => { scheduleError = error; });
+          }
           renderSourceList();
           latest = latest || {checks: []};
           latest.source = source;
+          if (editingExisting) {
+            showView('sources');
+            notice(scheduleError
+              ? `来源设置已保存，但后台同步任务未更新：${connectFailure(scheduleError)}`
+              : `来源设置已保存，自动同步：${syncIntervalLabel(source)}。`, scheduleError ? 'error' : 'success');
+            return;
+          }
           showView('service');
           await refreshStatus();
         } catch (error) {
@@ -808,7 +1112,17 @@
       byId('continueAccount').addEventListener('click', () => showView('account'));
       byId('backServiceSources').addEventListener('click', () => { renderSourceList(); showView('sources'); });
       byId('backService').addEventListener('click', () => showView('service'));
-      byId('backAccount').addEventListener('click', () => showView('account'));
+      byId('backAccount').addEventListener('click', () => runRequest('backAccount', async () => {
+        const binding = await sourceStateGet('subscription/binding');
+        showView(binding ? 'complete' : 'account');
+      }));
+      byId('changeSubscription').addEventListener('click', () => runRequest('changeSubscription', async () => {
+        notice('');
+        try {
+          await atStage('读取订阅清单', listSubscriptions);
+          showView('subscriptions');
+        } catch (error) { notice(connectFailure(error), 'error'); }
+      }));
       byId('retrySubscriptions').addEventListener('click', () => runRequest('retrySubscriptions', async () => {
         notice('');
         try { await atStage('读取订阅清单', listSubscriptions); }
@@ -823,6 +1137,7 @@
         byId('sourceName').value = '我的 ZBoard';
         byId('providerOrigin').value = '';
         setNetworkPath('direct');
+        setSyncInterval(900);
         notice('');
         showView('source');
       });
@@ -832,28 +1147,39 @@
           const binding = await sourceStateGet('subscription/binding');
           if (!binding?.remote_subscription_id) throw new Error('当前没有已关联的订阅。');
           await loadCapabilities();
-          const result = await pullSubscription(binding.remote_subscription_id, binding.name, binding.revision || null);
-          await synchronizeMessages();
-          notice(result.notModified ? '订阅已经是最新版本。' : '订阅和消息已同步。', 'success');
+          const result = await pullSubscription(binding.remote_subscription_id, binding.name, {force: true});
+          const messageResult = await synchronizeMessages();
+          const syncMessage = result.usageError
+            ? `订阅配置已同步，但流量信息更新失败：${result.usageError}`
+            : result.notModified ? '订阅已经是最新版本。' : '订阅和消息已同步。';
+          notice(messageResult.notificationFailed
+            ? `${syncMessage.replace(/。$/u, '')}；新消息已同步，但系统提醒未送达，请查看客户端日志或系统通知设置。`
+            : syncMessage,
+          result.usageError || messageResult.notificationFailed ? 'warning' : 'success');
         } catch (error) {
           notice(connectFailure(error), 'error');
         }
       }));
       byId('removeSource').addEventListener('click', () => runRequest('removeSource', async () => {
         if (!activeSource) return;
-        if (!confirm(`确定移除来源“${activeSource.name}”吗？对应的客户端托管订阅及其关联配置也会一并移除。`)) return;
-        try {
-          await clearActiveSourceRuntime(true);
-          const removedId = activeSource.id;
-          activeSource = null;
-          await saveSources(sources.filter(source => source.id !== removedId));
-          renderSourceList();
-          notice('来源、设备授权和托管订阅已移除。', 'success');
-          showView('sources');
-        } catch (error) {
-          notice(connectFailure(error), 'error');
-        }
+        await removeSourceRecord(activeSource);
       }));
+
+      byId('closeMessage').addEventListener('click', () => byId('messageDialog').close());
+      byId('messageDialog').addEventListener('click', event => {
+        if (event.target === byId('messageDialog')) byId('messageDialog').close();
+      });
+
+      for (const option of document.querySelectorAll('[data-sync-interval]')) {
+        option.addEventListener('click', () => setSyncInterval(Number(option.dataset.syncInterval)));
+        option.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          event.preventDefault();
+          const options = [...document.querySelectorAll('[data-sync-interval]')];
+          const next = options[(options.indexOf(option) + (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1) + options.length) % options.length];
+          next.click(); next.focus();
+        });
+      }
 
       byId('networkPath').addEventListener('click', () => {
         const open = byId('networkPath').getAttribute('aria-expanded') !== 'true';
@@ -913,10 +1239,15 @@
         try {
           const selected = availableSubscriptions.find(item => item.subscription_id === selectedSubscriptionId);
           if (!selected) throw new Error('请选择一个订阅。');
-          await pullSubscription(selected.subscription_id, selected.display_name);
+          const result = await selectSubscription(selected);
           await synchronizeMessages().catch(() => {});
-          notice('订阅已交给客户端托管。', 'success');
+          notice(result.removalError
+            ? `新订阅已关联，但旧订阅移除失败：${result.removalError}；下次打开连接时会重试。`
+            : result.usageError
+            ? `订阅已关联，但流量信息暂未更新：${result.usageError}`
+            : '订阅已交给客户端托管。', result.usageError || result.removalError ? 'warning' : 'success');
           showView('complete');
+          await refreshAccountProfile();
         } catch (error) {
           notice(connectFailure(error), 'error');
         }
@@ -945,10 +1276,12 @@
 
       (async () => {
         try {
-          const config = await znetPlugin.configuration.get(component);
           const stored = await stateGet('sources/index');
           sources = Array.isArray(stored) ? stored : [];
           validateSources(sources);
+          renderSourceList();
+          showView('sources');
+          const config = await znetPlugin.configuration.get(component);
           if (!sources.length && config.provider_origin) {
             const legacyIdentity = await stateGet('device/identity');
             const source = {
@@ -968,13 +1301,15 @@
               if (value != null) await secretPut(sourceSecretKey(key), value);
             }
             sources = [source];
-            await saveSources(sources);
+            await saveSources(sources, true);
             await sdk('tasks.schedule', 'self', 'schedule_delete', {taskId: 'connect-sync'}, 65536).catch(() => {});
           } else if (!config.provider_origins || config.provider_origins !== JSON.stringify([...new Set(sources.map(source => source.origin))])) {
-            await saveSources(sources);
+            await saveSources(sources, true);
           }
         } catch (error) {
-          notice(`${error.message || '无法读取已有设置'}；可以直接重新填写并保存。`, 'error');
+          notice(sources.length
+            ? `读取来源配置时出错：${error.message || '无法读取已有设置'}。已保留本机来源，可重试或继续管理。`
+            : `${error.message || '无法读取已有设置'}；可以直接重新填写并保存。`, 'error');
         }
         renderSourceList();
         showView('sources');

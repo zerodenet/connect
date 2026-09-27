@@ -268,7 +268,7 @@ func (runtime *connectRuntime) pruneSafeReplays(ctx context.Context, storage sto
 
 func isSafeOperation(operation string) bool {
 	switch operation {
-	case "devices.list", "subscriptions.list", "subscriptions.get-content", "messages.list", "messages.get":
+	case "devices.list", "account.me", "subscriptions.list", "subscriptions.get-content", "subscriptions.usage", "messages.list", "messages.get":
 		return true
 	default:
 		return false

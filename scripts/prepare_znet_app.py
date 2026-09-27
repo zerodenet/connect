@@ -28,6 +28,7 @@ def stage(output: Path, version: str, registration_out: Path | None = None, publ
     ui_root = output / "ui/manage"
     ui_root.mkdir(parents=True)
     shutil.copy2(ROOT / "znet-sink/ui/management.html", ui_root / "index.html")
+    shutil.copy2(ROOT / "znet-sink/ui/style.css", ui_root / "style.css")
     shutil.copy2(ROOT / "znet-sink/ui/page.js", ui_root / "page.js")
     if registration_out is not None:
         if not public_key:

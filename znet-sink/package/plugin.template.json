@@ -16,6 +16,7 @@
       "title": "Connect 管理",
       "kind": "management",
       "entry": "ui/manage/index.html",
+      "styles": ["ui/manage/style.css"],
       "scripts": ["ui/manage/page.js"]
     }
   ],

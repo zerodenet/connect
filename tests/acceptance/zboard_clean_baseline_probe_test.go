@@ -43,7 +43,9 @@ func TestConnectPackageIsAcceptedByCleanHost(t *testing.T) {
 	for _, capability := range []string{
 		"zboard.http.route.v1",
 		"zboard.account.assertion.v1",
+		"zboard.account.self.read.v1",
 		"zboard.subscription.projection.v1",
+		"zboard.subscription.read.v1",
 		"zboard.message.projection.v1",
 	} {
 		found := false

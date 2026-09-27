@@ -22,7 +22,9 @@ var runtimeCapabilities = []string{
 	"zboard.storage.v1",
 	"zboard.http.route.v1",
 	pluginv1.AccountAssertionCapability,
+	accountSelfReadCapability,
 	pluginv1.SubscriptionProjectionCapability,
+	subscriptionReadCapability,
 	pluginv1.MessageProjectionCapability,
 }
 

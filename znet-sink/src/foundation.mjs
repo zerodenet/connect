@@ -83,6 +83,9 @@ export default function connectComponent() {
   const hasSession = sources.some((source) => typeof state[sourceStateKey(source, 'session/metadata')] === 'string');
   const hasBinding = sources.some((source) => typeof state[sourceStateKey(source, 'subscription/binding')] === 'string');
   const hasMessages = sources.some((source) => typeof state[sourceStateKey(source, 'messages/summary')] === 'string');
+  const usageError = sources.map((source) => parseStored(sourceStateKey(source, 'subscription/usage_error')))
+    .find((value) => typeof value?.message === 'string');
+  const hasUsageSync = sources.some((source) => Number.isSafeInteger(parseStored(sourceStateKey(source, 'subscription/usage_checked_at'))));
 
   function status() {
     const checks = [
@@ -101,6 +104,9 @@ export default function connectComponent() {
       {id: 'service-identity', label: '服务身份与设备密钥', state: hasSession ? 'ready' : 'waiting', detail: hasSession ? '本机设备身份已建立。' : '在管理页确认服务后建立。'},
       {id: 'account-authorization', label: '账号授权', state: hasSession ? 'ready' : 'waiting', detail: hasSession ? '当前设备已有授权记录。' : '密码仅用于一次授权，不写入普通配置或插件状态。'},
       {id: 'subscription-binding', label: '订阅关联', state: hasBinding ? 'ready' : 'waiting', detail: hasBinding ? '已关联客户端托管订阅。' : '授权后选择订阅。'},
+      ...(hasBinding ? [{id: 'subscription-usage', label: '流量与到期时间',
+        state: usageError ? 'action_required' : hasUsageSync ? 'ready' : 'waiting',
+        detail: usageError?.message || (hasUsageSync ? '最近一次用量已写入客户端。' : '等待首次用量同步。')}] : []),
       {id: 'messages', label: '消息', state: hasMessages ? 'ready' : hasSession ? 'action_required' : 'waiting', detail: hasMessages ? '已有最近一次消息同步记录。' : hasSession ? '请在管理页同步消息。' : '授权后可用。'},
     ];
     return {
@@ -136,7 +142,8 @@ export default function connectComponent() {
     const source = sources.find((candidate) => candidate.id === invocation.payload?.source_id);
     if (!source) return envelope({ok: false, code: 'source_not_found', message: '来源不存在。'});
     return envelope({ok: true, status: status()}, Object.fromEntries([
-      'device/identity', 'session/metadata', 'subscription/binding', 'messages/summary',
+      'device/identity', 'session/metadata', 'subscription/binding', 'subscription/usage_error',
+      'subscription/usage_checked_at', 'messages/summary',
     ].map((suffix) => [sourceStateKey(source, suffix), null])));
   }
   if (invocation.action === 'lifecycle.host_start') {
@@ -145,8 +152,15 @@ export default function connectComponent() {
       reason: hasBinding ? 'ready' : hasSession ? 'subscription_required' : configured ? 'interactive_setup_required' : 'source_not_configured',
     });
   }
-  if (invocation.action.startsWith('lifecycle.scheduled.sync.')) {
-    return scheduledSync(invocation.action.slice('lifecycle.scheduled.sync.'.length), {
+  const scheduledActions = [
+    ['lifecycle.scheduled.sync.', 'subscription'],
+    ['lifecycle.scheduled.usage.', 'usage'],
+    ['lifecycle.scheduled.messages.', 'messages'],
+  ];
+  const scheduledAction = scheduledActions.find(([prefix]) => invocation.action.startsWith(prefix));
+  if (scheduledAction) {
+    const [prefix, kind] = scheduledAction;
+    return scheduledSync(invocation.action.slice(prefix.length), kind, {
       sources, state, invocation, sourceStateKey, parseStoredValue, envelope,
       base64, utf8, unbase64, decodeUtf8, hostSdkCall: globalThis.hostSdkCall,
     });

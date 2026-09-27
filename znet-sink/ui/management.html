@@ -12,7 +12,7 @@
         <h1 id="pageTitle">连接订阅来源</h1>
         <p id="pageDescription">第 1 步，共 3 步 · 添加一个兼容的服务地址。</p>
       </header>
-      <div id="notice" data-znet-notice hidden role="status"></div>
+      <div id="notice" class="connect-notice" data-znet-notice hidden role="status" aria-live="polite"></div>
 
       <section id="view-sources" data-znet-view>
         <div data-znet-panel>
@@ -59,6 +59,18 @@
                   <button type="button" data-znet-select-option role="option" data-value="core" aria-selected="false">通过代理内核</button>
                 </div>
               </div>
+            </div>
+            <div data-znet-field>
+              <span id="syncIntervalLabel">自动同步</span>
+              <div id="syncIntervals" class="connect-sync-options" role="radiogroup" aria-labelledby="syncIntervalLabel">
+                <button type="button" role="radio" data-sync-interval="0" aria-checked="false">手动</button>
+                <button type="button" role="radio" data-sync-interval="900" aria-checked="true">15 分钟</button>
+                <button type="button" role="radio" data-sync-interval="1800" aria-checked="false">30 分钟</button>
+                <button type="button" role="radio" data-sync-interval="3600" aria-checked="false">1 小时</button>
+                <button type="button" role="radio" data-sync-interval="21600" aria-checked="false">6 小时</button>
+                <button type="button" role="radio" data-sync-interval="86400" aria-checked="false">24 小时</button>
+              </div>
+              <small>客户端运行时按此间隔检查订阅与新消息；手动模式不会在后台发送消息通知。</small>
             </div>
           </div>
           <div data-znet-actions>
@@ -118,7 +130,7 @@
         <div data-znet-panel>
           <div data-znet-panel-header>
             <h2>选择订阅</h2>
-            <p>选择要交给客户端托管的订阅，然后确认关联。</p>
+            <p id="subscriptionHint">选择要交给客户端托管的订阅，然后确认关联。</p>
           </div>
           <div id="subscriptionList" data-znet-callout>
             <strong>正在读取订阅</strong>
@@ -141,11 +153,14 @@
           <dl data-znet-summary>
             <div><dt>名称</dt><dd id="completeName">—</dd></div>
             <div><dt>服务</dt><dd id="completeOrigin">—</dd></div>
+            <div><dt>账号</dt><dd id="completeAccount">—</dd></div>
+            <div><dt>自动同步</dt><dd id="completeSyncInterval">每 15 分钟</dd></div>
           </dl>
           <div data-znet-actions>
             <button id="backCompleteSources" type="button" data-variant="ghost">返回来源列表</button>
             <button id="manageSource" type="button" data-variant="ghost">管理来源</button>
             <button id="removeSource" type="button" data-variant="ghost">移除来源</button>
+            <button id="changeSubscription" type="button" data-variant="outline">切换订阅</button>
             <button id="syncNow" type="button" data-variant="primary">立即同步</button>
           </div>
         </div>
@@ -156,10 +171,6 @@
           </div>
           <div id="messageList" data-znet-status-list>
             <div data-znet-callout><strong>尚未同步消息</strong>点击“立即同步”读取最近消息。</div>
-          </div>
-          <div id="messageDetail" data-znet-callout hidden>
-            <strong id="messageDetailTitle"></strong>
-            <pre id="messageDetailBody" data-znet-code></pre>
           </div>
         </div>
       </section>
@@ -178,6 +189,16 @@
           </div>
         </div>
       </section>
+      <dialog id="messageDialog" class="connect-message-dialog" aria-labelledby="messageDetailTitle" aria-describedby="messageDetailBody">
+        <div class="connect-message-dialog-header">
+          <h2 id="messageDetailTitle">服务消息</h2>
+          <p id="messageDetailMeta"></p>
+        </div>
+        <div id="messageDetailBody" class="connect-message-dialog-body"></div>
+        <div class="connect-message-dialog-footer">
+          <button id="closeMessage" type="button" data-variant="outline">关闭</button>
+        </div>
+      </dialog>
     </section>
   </main>
 
