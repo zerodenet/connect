@@ -31,8 +31,11 @@ surface to renew, request content with the saved revision, update only the stabl
 and refresh the message summary. If the provider advertises the optional read-only
 `subscriptions.usage` operation, both manual and scheduled sync refresh aggregate used/total bytes
 and expiry through the client's owner-checked `subscription_metadata_update` SDK method even when
-configuration content is unchanged. Older hosts continue to sync configuration without claiming
-usage data. Newly projected unread messages can notify from the background
+configuration content is unchanged. When the provider confirms the already-applied revision is
+unchanged, the component calls `subscription_sync_complete` to record a successful check with the
+host's timestamp, without replacing configuration or quota. Failed content checks never advance
+that timestamp. The package declares both methods in `requires_methods`; installing this adapter
+requires a host that implements them. Newly projected unread messages can notify from the background
 without the management page open; the in-app notification action navigates to the message. Guest CPU/output limits remain separate from bounded host IO, and
 failed actions use durable bounded exponential retry checkpoints.
 

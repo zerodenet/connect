@@ -106,7 +106,7 @@ export default function connectComponent() {
       {id: 'subscription-binding', label: '订阅关联', state: hasBinding ? 'ready' : 'waiting', detail: hasBinding ? '已关联客户端托管订阅。' : '授权后选择订阅。'},
       ...(hasBinding ? [{id: 'subscription-usage', label: '流量与到期时间',
         state: usageError ? 'action_required' : hasUsageSync ? 'ready' : 'waiting',
-        detail: usageError?.message || (hasUsageSync ? '最近一次用量已写入客户端。' : '等待首次用量同步。')}] : []),
+        detail: usageError?.message ? `上次用量同步未成功：${usageError.message}` : (hasUsageSync ? '最近一次用量已写入客户端。' : '等待首次用量同步。')}] : []),
       {id: 'messages', label: '消息', state: hasMessages ? 'ready' : hasSession ? 'action_required' : 'waiting', detail: hasMessages ? '已有最近一次消息同步记录。' : hasSession ? '请在管理页同步消息。' : '授权后可用。'},
     ];
     return {

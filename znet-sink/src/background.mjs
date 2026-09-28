@@ -296,7 +296,15 @@ export function scheduledSync(sourceId, kind, context) {
         });
         let changed = false;
         let usageUpdated = null;
-        if (projected.not_modified !== true) {
+        if (projected.not_modified === true) {
+          if (!knownRevision || projected.revision !== knownRevision) {
+            throw new Error('Connect 服务返回的未变化版本与已应用订阅不一致。');
+          }
+          sdk('subscriptions.manage', 'self', 'subscription_sync_complete', {
+            providerId: capabilities.provider_id, remoteSubscriptionId: binding.remote_subscription_id,
+            revision: knownRevision,
+          });
+        } else {
           if (typeof projected.content !== 'string' || !projected.content) throw new Error('Connect 订阅内容为空。');
           let content = projected.content;
           if (projected.format === 'znet-sink' && content.trimStart().startsWith('{')) {
@@ -319,7 +327,7 @@ export function scheduledSync(sourceId, kind, context) {
           usageUpdated = refreshUsage();
           changed = true;
         }
-        if (changed) log(usageUpdated ? 'info' : 'warn', 'Connect 后台订阅同步完成', {usageUpdated});
+        log(changed && !usageUpdated ? 'warn' : 'info', 'Connect 后台订阅同步完成', {changed, usageUpdated});
         return envelope({ok: true, changed}, updates);
       }
       if (kind !== 'messages') throw new Error('Connect 后台任务类型无效。');

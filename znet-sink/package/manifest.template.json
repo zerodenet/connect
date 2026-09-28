@@ -5,6 +5,7 @@
   "component_id": "provider-source",
   "version": "0.0.1",
   "requires_host": ">=0.0.2, <0.1.0",
+  "requires_methods": ["subscription_metadata_update", "subscription_sync_complete"],
   "api_version": 1,
   "runtime": "javascript-module-v1",
   "minimum_isolation": "vm",

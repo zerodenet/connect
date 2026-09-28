@@ -706,6 +706,14 @@
           known_revision: knownRevision,
         });
         if (projected.not_modified === true) {
+          if (!knownRevision || projected.revision !== knownRevision) {
+            throw new Error('Connect 服务返回的未变化版本与已应用订阅不一致。');
+          }
+          await sdk('subscriptions.manage', 'self', 'subscription_sync_complete', {
+            providerId: providerCapabilities.provider_id,
+            remoteSubscriptionId: subscriptionId,
+            revision: knownRevision,
+          });
           return {notModified: true, usageError: previousUsageError};
         }
         const content = subscriptionContentForHost(projected);
@@ -892,10 +900,14 @@
         }
         const session = configured ? await sourceStateGet('session/metadata') : null;
         const binding = configured ? await sourceStateGet('subscription/binding') : null;
+        const storedUsageError = configured && binding ? await sourceStateGet('subscription/usage_error') : null;
+        const usageCapabilityRecovered = providerReady && binding &&
+          providerCapabilities?.operations?.includes('subscriptions.usage') &&
+          storedUsageError?.message === usageUnavailableMessage;
         const usageError = configured && binding
           ? !providerCapabilities?.operations?.includes('subscriptions.usage') && providerReady
             ? {message: usageUnavailableMessage}
-            : await sourceStateGet('subscription/usage_error')
+            : usageCapabilityRecovered ? null : storedUsageError
           : null;
         const usageCheckedAt = configured && binding ? await sourceStateGet('subscription/usage_checked_at') : null;
         return {
@@ -909,8 +921,8 @@
             {id:'account-authorization', label:'账号授权', state:session?'ready':'waiting', detail:session?'当前设备已授权。':'密码仅用于一次授权。'},
             {id:'subscription-binding', label:'订阅关联', state:binding?'ready':'waiting', detail:binding
               ? `${binding.name}${usageError?.message ? ` · 流量信息：${usageError.message}` : ''}` : '授权后选择订阅。'},
-            {id:'subscription-usage', label:'流量与到期时间', state:binding?(usageError?.message?'action_required':usageCheckedAt?'ready':'waiting'):'waiting',
-              detail:binding?(usageError?.message || (usageCheckedAt ? '最近一次用量已写入客户端。' : '等待首次用量同步。')):'关联订阅后检查。'},
+            {id:'subscription-usage', label:'流量与到期时间', state:binding?(usageError?.message?'action_required':usageCapabilityRecovered?'waiting':usageCheckedAt?'ready':'waiting'):'waiting',
+              detail:binding?(usageError?.message || (usageCapabilityRecovered ? '服务已开放订阅用量能力，请点击“立即同步”刷新流量和到期时间。' : usageCheckedAt ? '最近一次用量已写入客户端。' : '等待首次用量同步。')):'关联订阅后检查。'},
             {id:'messages', label:'消息', state:session?'ready':'waiting', detail:session?'消息投影已可用。':'授权后可用。'},
           ],
           capability_gap: providerError ? {

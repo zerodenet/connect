@@ -174,6 +174,11 @@ test('scheduled actions refresh usage, binding and messages separately within th
         metadataUpdate = call.arguments;
         managedUsage = call.arguments.usage;
         return ok({id: 'managed-1', usedBytes: 375, totalBytes: 1000});
+      case 'subscription_sync_complete':
+        assert.deepEqual(call.arguments, {
+          providerId: origin, remoteSubscriptionId: 'subscription-1', revision: 'rev-2',
+        });
+        return ok({id: 'managed-1', lastSyncAtUnixMs: now * 1000});
       case 'notification_post':
         postedNotification = call.arguments;
         if (notificationFailureCode) return JSON.stringify({version: 1, ok: false, error: {
@@ -284,12 +289,16 @@ test('scheduled actions refresh usage, binding and messages separately within th
   unchanged = true;
   const appliesBefore = methods.filter(method => method === 'subscription_apply').length;
   const metadataBefore = methods.filter(method => method === 'subscription_metadata_update').length;
+  const completedBefore = methods.filter(method => method === 'subscription_sync_complete').length;
   const unchangedResult = runScheduled('sync');
   assert.equal(unchangedResult.value.ok, true);
   assert.equal(unchangedResult.value.changed, false);
   assert.equal(methods.filter(method => method === 'subscription_apply').length, appliesBefore);
   assert.equal(methods.filter(method => method === 'subscription_metadata_update').length, metadataBefore);
   assert.equal(subscriptionRequests.at(-1).known_revision, 'rev-2');
+  assert.equal(methods.filter(method => method === 'subscription_sync_complete').length, completedBefore + 1);
+  assert.ok(logged.some(call => call.arguments.message === 'Connect 后台订阅同步完成' &&
+    call.arguments.fields.changed === false));
 
   contentUnavailable = true;
   reportedUsedBytes = 1200;
@@ -304,6 +313,8 @@ test('scheduled actions refresh usage, binding and messages separately within th
   assert.equal(scheduledTasks.size, 2);
   assert.equal(methods.filter(method => method === 'subscription_metadata_update').length, metadataBeforeUnavailable + 1);
   assert.equal(metadataUpdate.usage.usedBytes, 1200);
+  assert.equal(methods.filter(method => method === 'subscription_sync_complete').length, completedBefore + 1,
+    'quota success must not record a failed content check as synchronized');
 
   const usageOperation = capabilities.operations.indexOf('subscriptions.usage');
   capabilities.operations.splice(usageOperation, 1);
@@ -375,7 +386,7 @@ test('provider component exposes a persisted usage capability gap', async () => 
   }});
   const usage = result.value.checks.find(item => item.id === 'subscription-usage');
   assert.equal(usage.state, 'action_required');
-  assert.equal(usage.detail, '服务暂不提供用量');
+  assert.equal(usage.detail, '上次用量同步未成功：服务暂不提供用量');
 });
 
 test('provider component waits for a successful usage metadata update before reporting ready', () => {
