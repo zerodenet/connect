@@ -17,7 +17,8 @@ source_commit=$(git -C "$repo_root" rev-parse HEAD)
 test -f "$repo_root/.local/publisher.key"
 go -C "$repo_root" run ./tools/keyderive \
   "$repo_root/.local/publisher.key" \
-  "$repo_root/.local/publisher.key.pub"
+  "$repo_root/.local/publisher.key.pub" \
+  "$repo_root/.local/publisher.seed"
 public_key=$(tr -d '\r\n' < "$repo_root/.local/publisher.key.pub")
 
 python3 "$repo_root/scripts/check_release_readiness.py"
