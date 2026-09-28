@@ -16,3 +16,5 @@ __pycache__/
 *.zbplugin
 *.zspkg
 marketplace-entry.json
+
+.release-tools/

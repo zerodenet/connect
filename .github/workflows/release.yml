@@ -33,6 +33,22 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Check out the pinned ZNet Sink package tool
+        uses: actions/checkout@v4
+        with:
+          repository: zerodenet/znet-sink
+          ref: e8bd721fa4b5e752de4fe205ca46cec0c5fdb3e1
+          path: .release-tools/znet-sink
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache package tool compilation
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .release-tools/znet-sink/src-tauri -> target
+
       - name: Resolve release identity
         id: release
         shell: bash
@@ -68,6 +84,7 @@ jobs:
       - name: Build and verify signed packages
         env:
           PUBLISHED_AT: ${{ steps.release.outputs.published_at }}
+          ZNET_GUI_ROOT: ${{ github.workspace }}/.release-tools/znet-sink
         run: make release VERSION=${{ steps.release.outputs.version }}
 
       - name: Record checksums
